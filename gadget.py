@@ -6,7 +6,7 @@ class Gadget:
         self.current_state = None
 
     def __repr__(self):
-        return f"{self.name} is in state {self.current_state}"
+        return f"{self.name} Gadget is in state {self.current_state}"
     
     def traverse(self, in_location, out_location):
         raise NotImplementedError("Gadgets must be able to be traversed!")
@@ -39,7 +39,11 @@ class TraversalError(Exception):
 
 class Toggle2Locking(Gadget):
     def __init__(self):
-        super.__init__()
+        self.locations = [1,2,3,4]
+        self.states = [0,1,2]
+        self.name = "Locking 2 Toggle"
+        self.current_state = 0
+
 
     def traverse(self, in_location, out_location):
         #If I go from L1 to R1, I go from state 0 to state 1. (C.f. L2 to R2, state 2). [Locations are usually clockwise?]
@@ -71,4 +75,24 @@ class Toggle2Locking(Gadget):
 
         return True
     
+
+#Tests!
     
+
+X = Toggle2Locking()
+
+print(X.traverse(1, 2) == True) #should return False
+
+print(X.traverse(1, 4) == True) #should return True
+
+print(X.getCurrentState()) #should be 1
+
+print(X.traverse(1, 2) == True) #should return False
+
+print(X.traverse(4, 3) == True) #should return False
+
+print(X.traverse(4, 2) == True) #should return False
+
+print(X.traverse(4, 1) == True) #should return True
+
+print(X.getCurrentState())
