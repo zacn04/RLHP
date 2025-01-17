@@ -4,13 +4,15 @@ Author: Zac Nwogwugwu, 2024
 This will most likely be defining our toolkit for gadgets.
 '''
 
-class Gadget:
-    def __init__(self, name=None, locations=None, states=None, transitions=None, current_state=None):
+from gadgetlike import GadgetLike
+
+class Gadget(GadgetLike):
+    def __init__(self, name=None, locations=None, states=None, transitions=None, current_state=0):
         self.locations = locations
         self.states = states
         self.name = name
         self.transitions = transitions
-        self.current_state = None
+        self.current_state = current_state
 
     def __repr__(self):
         return f"{self.name} Gadget is in state {self.current_state}"
@@ -21,8 +23,10 @@ class Gadget:
             self.current_state = self.transitions[self.current_state][(in_location, out_location)]
             return True
         except KeyError:
-            raise TraversalError(f"Invalid transition from {in_location} to {out_location} in state {self.current_state}")
-
+            return False
+            '''raise TraversalError(f"Invalid transition from {in_location} to {out_location} in state {self.current_state}")
+        finally:
+            pass'''
 
     def getCurrentState(self):
         return self.current_state
@@ -39,6 +43,13 @@ class Gadget:
     
     def getStates(self):
         return self.states
+    
+    def getTransitions(self):
+        return self.transitions
+    
+    def __getitem__(self, transition): #allows for easier transitions.
+        self.traverse(transition[0], transition[1])
+        
     
 
 class TraversalError(Exception):
@@ -113,18 +124,49 @@ class Diode(Gadget):
 
 X = Toggle2Locking()
 
-print(X.traverse(1, 2) == True) #should return False
+print(X)
 
-print(X.traverse(1, 4) == True) #should return True
+X[(0,1)]
+
+X[(0,3)]
+
+'''print(X.traverse(1, 2) == True) #should return False
+
+print(X.traverse(1, 4) == True) #should return True'''
+
 
 print(X.getCurrentState()) #should be 1
 
-print(X.traverse(1, 2) == True) #should return False
+
+X[(0,1)]
+X[(3,2)]
+X[(3,1)]
+X[(3,0)]
+'''print(X.traverse(1, 2) == True) #should return False
 
 print(X.traverse(4, 3) == True) #should return False
 
 print(X.traverse(4, 2) == True) #should return False
 
-print(X.traverse(4, 1) == True) #should return True
+print(X.traverse(4, 1) == True) #should return True'''
 
 print(X.getCurrentState())
+
+print(X)
+
+X[(1,0)]
+
+print(X)
+
+X[(2,3)]
+
+print(X)
+
+X[(3,2)]
+
+print(X)
+
+
+#Want to implement logic s.t. 
+# if I am in state 0 and I do gadget[(0,1)] (if (0,1) is a transition in state 0, it goes to state 1)
+# if it isn't should throw an error.

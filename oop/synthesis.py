@@ -23,6 +23,6 @@ def generate_gadget(name, num_states, num_transitions, num_locations):
         
     return gadget
 
-#lower priority...
+#lower priority... but also how we are generating synthetic data!
 
 
