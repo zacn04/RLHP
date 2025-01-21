@@ -58,7 +58,7 @@ class TraversalError(Exception):
     def __str__(self):
         return self.message
 
-
+#LOCATIONS MUST BE CLOCKWISE!
 
 class Toggle2Locking(Gadget):
     def __init__(self):
@@ -66,9 +66,9 @@ class Toggle2Locking(Gadget):
         states = [0,1,2]
         name = "Locking 2 Toggle"
         transitions = {
-            0: {(0, 1): 1, (2, 3): 2},
+            0: {(0, 1): 1, (3, 2): 2},
             1: {(1, 0): 0},
-            2: {(3, 2): 0}
+            2: {(2, 3): 0}
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -81,7 +81,7 @@ class Door(Gadget):
         name = "Door"
         transitions = {
             0: {(0,1): 1},
-            1: {(3,2): 0, (1,0): 1} #traversing an open door stays open, can still close it.
+            1: {(2,3): 0, (1,0): 1} #traversing an open door stays open, can still close it.
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -93,7 +93,7 @@ class SelfClosingDoor(Gadget): #basically same as door but any traversal of the 
         name = "Self Closing Door"
         transitions = {
             0: {(0,1): 1},
-            1: {(3,2): 0, (1,0): 0} #traversing an open door closes it, in any state
+            1: {(2,3): 0, (1,0): 0} #traversing an open door closes it, in any state
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -104,9 +104,9 @@ class Toggle2(Gadget):
         states = [0,1,2]
         name = "2 Toggle"
         transitions = {
-            0: {(0, 1): 1, (2, 3): 2},
+            0: {(0, 1): 1, (3, 2): 2},
             1: {(1, 0): 0},
-            2: {(3, 2): 0}
+            2: {(2, 3): 0}
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
