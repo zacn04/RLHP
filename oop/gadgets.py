@@ -65,6 +65,19 @@ class Toggle2(Gadget):
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
 
+class AntiParallel2Toggle(Gadget):
+    def __init__(self):
+        locations = [0,1,2,3]
+        states = [0,1,2]
+        name = "AntiParallel 2 Toggle"
+        transitions = {
+            0: {(0, 1): 2, (2, 3): 1},
+            1: {(1, 0): 0},
+            2: {(2, 3): 0}
+        }
+        current_state = 0
+        super().__init__(name, locations, states, transitions, current_state)
+
 class TripwireLock(Gadget):
     #TODO: implement
     pass

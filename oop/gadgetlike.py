@@ -178,6 +178,8 @@ class GadgetNetwork(GadgetLike):
 
         new_locations = list(gadget1.locations) + offset_rotated_locations
 
+        #after this, we have both transitions, separate. need to combine and not lose any lol
+
         new_states = []
         for s1 in gadget1.states:
             for s2 in rotated_gadget2.states:
@@ -189,7 +191,24 @@ class GadgetNetwork(GadgetLike):
         # If x->y is state 0 to 1 for gadget 1, and we have now k+z putting gadget 2 from stae 0 to 1, 
         # now we should have state (0,0), (0,1) etc
 
-        for state_1 in gadget1.states:
+        # maybe iterate on the new states? for (0,0) and we had a 0-1 transition for gadget 1, we use the 
+        # transition before to get a (1,0) new state?
+
+        for state in new_states:
+            new_transitions[state] = {}
+            #new_transitions[state][location x, location y] = (new state in gadget 1, same state in gadget 2)
+            # for state in gadget1 and same for gadget 2
+
+            first_state, second_state = state
+            for transition in gadget1.transitions[first_state]:
+                # perform transition while keeping other state the same. 
+                new_transitions[state][transition] = (gadget1.transitions[first_state][transition], second_state)
+            
+            for transition in offset_rotated_transitions[second_state]:
+                new_transitions[state][transition] = (first_state, offset_rotated_transitions[second_state][transition])
+        
+
+        '''for state_1 in gadget1.states:
             for state_2 in rotated_gadget2.states:
 
                 new_transitions[(state_1, state_2)] = {}
@@ -200,7 +219,7 @@ class GadgetNetwork(GadgetLike):
 
                 if state_2 in offset_rotated_transitions:
                     for loc2, next_s2 in offset_rotated_transitions[s2].items():
-                        new_transitions[(state_1, state_2)][loc2] = (state_1, next_s2)
+                        new_transitions[(state_1, state_2)][loc2] = (state_1, next_s2)'''
 
         for op in self.operations:
             if op[0] == "CONNECT":
