@@ -43,7 +43,6 @@ class Gadget(GadgetLike):
 
     def __repr__(self):
         return f"{self.name}"
-    
     def traverse(self, in_location, out_location):
         #Generalised traversal logic
         try:
@@ -52,7 +51,6 @@ class Gadget(GadgetLike):
         except KeyError:
             return False
             
-
     def getCurrentState(self):
         return self.current_state
     
@@ -116,8 +114,8 @@ class GadgetNetwork(GadgetLike):
             new_loc_map = {}
             for old_transition, next_state in loc_map.items():
                 locA, locB = old_transition
-                newA = loc1 if locA == loc2 else locA
-                newB = loc1 if locB == loc2 else locB
+                newA = loc2 if locA == loc1 else locA
+                newB = loc2 if locB == loc1 else locB
                 if (newA, newB) in new_loc_map:
                     if new_loc_map[(newA, newB)] != next_state:
                         raise ValueError(f"Conflict in transitions for merged location {(newA, newB)}")
@@ -128,7 +126,7 @@ class GadgetNetwork(GadgetLike):
         
 
         gadget.transitions = new_transitions
-        if loc2 in gadget.locations:
+        if loc1 in gadget.locations:
             gadget.locations.remove(loc2)
 
         #self.operations.append(("CONNECT", gadget, loc1, loc2))
@@ -243,7 +241,7 @@ class GadgetNetwork(GadgetLike):
         #self.operations.append("COMBINE", gadget1, gadget2, rotation)
         return new_gadget
 
-    def canonicalise(self):
+    def simplify(self):
         """
         The idea is to in some way describe how all the gadgets have been put together.
         """
@@ -262,7 +260,14 @@ class GadgetNetwork(GadgetLike):
                     combined = self.do_combine(g1, g2, rot)
 
         return combined
-                    
+    
+    def canonicalise(self):
+        """
+        Run a DFA minimisation algorithm on the simplified system to remove redundancies.
+        Relabel states, and alphabetise transitions to yield languages.
+        """
+        pass
+
 
 
         

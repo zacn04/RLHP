@@ -5,16 +5,12 @@ This will most likely be defining our toolkit for gadgets.
 '''
 
 from gadgetlike import Gadget
-
-class TraversalError(Exception):
-    def __init__(self, message):
-        self.message = message
-    def __str__(self):
-        return self.message
-
 #LOCATIONS MUST BE CLOCKWISE!
 
 class Toggle2Locking(Gadget):
+    """
+    Locking 2 Toggle Gadget.
+    """
     def __init__(self):
         locations = [0,1,2,3]
         states = [0,1,2]
@@ -26,9 +22,11 @@ class Toggle2Locking(Gadget):
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
-    
 
 class Door(Gadget):
+    """
+    Door Gadget.
+    """
     def __init__(self):
         locations = [0,1,2,3]
         states = [0,1]
@@ -40,7 +38,11 @@ class Door(Gadget):
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
 
-class SelfClosingDoor(Gadget): #basically same as door but any traversal of the open door closes it.
+class SelfClosingDoor(Gadget):
+    #basically same as door but any traversal of the open door closes it.
+    """
+    Self Closing Door Gadget.
+    """
     def __init__(self):
         locations = [0,1,2,3]
         states = [0,1] #State 0 is closed. State 1 is open.
@@ -53,11 +55,13 @@ class SelfClosingDoor(Gadget): #basically same as door but any traversal of the 
         super().__init__(name, locations, states, transitions, current_state)
 
 class Toggle2(Gadget):
-
+    """
+    2 Toggle Gadget.
+    """
     #both tunnels flip when you go through.
     def __init__(self):
         locations = [0,1,2,3]
-        states = [0,1,2]
+        states = [0,1]
         name = "2 Toggle"
         transitions = {
             0: {(0, 1): 1, (3, 2): 1},
@@ -67,6 +71,9 @@ class Toggle2(Gadget):
         super().__init__(name, locations, states, transitions, current_state)
 
 class AntiParallel2Toggle(Gadget):
+    """
+    Anti-Parallel 2 Toggle Gadget.
+    """
     def __init__(self):
         locations = [0,1,2,3]
         states = [0,1,2]
@@ -78,53 +85,3 @@ class AntiParallel2Toggle(Gadget):
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
-
-class TripwireLock(Gadget):
-    #TODO: implement
-    pass
-
-class Diode(Gadget):
-    #TODO: implement
-    pass
-
-#Tests!
-    
-
-'''X = Toggle2Locking()
-
-print(X)
-
-X[(0,1)]
-
-X[(0,3)]
-
-
-print(X.getCurrentState()) #should be 1
-
-
-X[(0,1)]
-X[(3,2)]
-X[(3,1)]
-X[(3,0)]
-
-
-print(X.getCurrentState())
-
-print(X)
-
-X[(1,0)]
-
-print(X)
-
-X[(2,3)]
-
-print(X)
-
-X[(3,2)]
-
-print(X)'''
-
-
-#Want to implement logic s.t. 
-# if I am in state 0 and I do gadget[(0,1)] (if (0,1) is a transition in state 0, it goes to state 1)
-# if it isn't should throw an error.

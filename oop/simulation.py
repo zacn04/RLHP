@@ -2,13 +2,28 @@
 Author: Zac Nwogwugwu, 2025
 """
 from gadgetlike import Gadget, GadgetNetwork
+from gadgets import Toggle2
 def do_simulate(gadgets: list[Gadget], combinations, target: Gadget) -> bool:
     """
     Does a combination of gadgets (through connecting or combining) simulate the target?
     Returns TRUE if so.
     """
-    return True
+    network = GadgetNetwork()
 
+    for gadget in gadgets:
+        network += gadget
+    network.operations = combinations
+
+    return are_dfa_equal(network.canonicalise(), target)
+
+def are_dfa_equal(network1, network2):
+    """
+    Check if they have an equal number of states, locations.
+    Run all states/transitions combinatorially of network2 on one instance of network1
+    If they have the same language reutrn True.
+    """
+    #possibly encode this verification algorithm into the __eq__ method
+    return network1==network2
 
 
 # Need some way of defining these combinations...
@@ -18,25 +33,15 @@ def do_simulate(gadgets: list[Gadget], combinations, target: Gadget) -> bool:
 # can a combination just be initialising another gadget with a superimposition?
 
 ### TESTS ###
-
-from gadgets import *
-
 net = GadgetNetwork()
 
-net += AntiParallel2Toggle()
+net += Toggle2()
 
-net += AntiParallel2Toggle()
+net += Toggle2()
 
-net.combine(net.subgadgets[0], net.subgadgets[1], rotation=0)
+net.combine(net.subgadgets[0], net.subgadgets[1], rotation=2)
 
-res = net.canonicalise()
+res = net.simplify()
 print(res)
 print(res.getLocations())
 print(res.getTransitions())
-
-
-# Combined APT!
-
-
-
-
