@@ -4,7 +4,7 @@ Author: Zac Nwogwugwu, 2024
 This will most likely be defining our toolkit for gadgets.
 '''
 
-from gadgetlike import Gadget
+from oop.gadgets.gadgetlike import Gadget
 #LOCATIONS MUST BE CLOCKWISE!
 
 class Toggle2Locking(Gadget):

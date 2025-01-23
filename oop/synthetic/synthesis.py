@@ -1,7 +1,7 @@
 """
 Author: Zac Nwogwugwu, 2025
 """
-from gadgets import Gadget
+from oop.gadgets.gadgetdefs import Gadget
 import random
 
 def generate_gadget(name, num_states, num_transitions, num_locations):
