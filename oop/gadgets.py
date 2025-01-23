@@ -53,14 +53,15 @@ class SelfClosingDoor(Gadget): #basically same as door but any traversal of the 
         super().__init__(name, locations, states, transitions, current_state)
 
 class Toggle2(Gadget):
+
+    #both tunnels flip when you go through.
     def __init__(self):
         locations = [0,1,2,3]
         states = [0,1,2]
         name = "2 Toggle"
         transitions = {
-            0: {(0, 1): 1, (3, 2): 2},
-            1: {(1, 0): 0},
-            2: {(2, 3): 0}
+            0: {(0, 1): 1, (3, 2): 1},
+            1: {(1, 0): 0, (2, 3): 0},
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -73,7 +74,7 @@ class AntiParallel2Toggle(Gadget):
         transitions = {
             0: {(0, 1): 2, (2, 3): 1},
             1: {(1, 0): 0},
-            2: {(2, 3): 0}
+            2: {(3, 2): 0}
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)

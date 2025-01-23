@@ -51,9 +51,7 @@ class Gadget(GadgetLike):
             return True
         except KeyError:
             return False
-            '''raise TraversalError(f"Invalid transition from {in_location} to {out_location} in state {self.current_state}")
-        finally:
-            pass'''
+            
 
     def getCurrentState(self):
         return self.current_state
@@ -87,7 +85,7 @@ class GadgetNetwork(GadgetLike):
         self.operations = []
 
 
-    #MAYBE find a way to index the subgadgets nicely..
+    #TODO: find a way to index the subgadgets nicely..
 
     def __iadd__(self, other):
         """
