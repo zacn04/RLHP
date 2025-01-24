@@ -40,5 +40,8 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "algorithm": "cpp"
-    }
+    },
+    "python.analysis.extraPaths": [
+        "./oop/gadgets"
+    ]
 }

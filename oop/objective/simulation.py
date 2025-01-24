@@ -3,6 +3,7 @@ Author: Zac Nwogwugwu, 2025
 """
 from oop.gadgets.gadgetlike import Gadget, GadgetNetwork
 from oop.gadgets.gadgetdefs import Toggle2
+
 def do_simulate(gadgets: list[Gadget], combinations, target: Gadget) -> bool:
     """
     Does a combination of gadgets (through connecting or combining) simulate the target?
