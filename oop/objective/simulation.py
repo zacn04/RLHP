@@ -15,7 +15,8 @@ def do_simulate(gadgets: list[Gadget], combinations, target: Gadget) -> bool:
         network += gadget
     network.operations = combinations
 
-    return are_dfa_equal(network.canonicalise(), target)
+    proposed = network.canonicalise()
+    return are_dfa_equal(proposed, target)
 
 def are_dfa_equal(network1, network2):
     """
@@ -23,7 +24,6 @@ def are_dfa_equal(network1, network2):
     Run all states/transitions combinatorially of network2 on one instance of network1
     If they have the same language reutrn True.
     """
-    #possibly encode this verification algorithm into the __eq__ method
     return network1==network2
 
 
@@ -43,6 +43,15 @@ net += Toggle2()
 net.combine(net.subgadgets[0], net.subgadgets[1], rotation=2)
 
 res = net.simplify()
-print(res)
-print(res.getLocations())
-print(res.getTransitions())
+
+net2 = GadgetNetwork()
+
+net2 += Toggle2()
+
+net2 += Toggle2()
+
+net.combine(net.subgadgets[1], net.subgadgets[0], rotation=0)
+
+res2 = net.simplify()
+
+print(are_dfa_equal(res, res2))

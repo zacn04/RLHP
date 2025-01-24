@@ -5,6 +5,8 @@ Handling the logic for gadget networks.
 """
 from abc import ABC, abstractmethod
 from typing import List, Dict, Tuple
+
+from dfa import hopcroft as hp
 class GadgetLike:
     """
     The base class for gadgets/gadget networks.
@@ -65,6 +67,41 @@ class Gadget(GadgetLike):
     def __getitem__(self, transition): #allows for easier transitions.
         self.traverse(transition[0], transition[1])
 
+    def __eq__(self, other):
+
+        all_states1 = self.getStates()
+        dfa1 =  \
+            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1[1:]
+        all_states2 = other.getStates()
+        dfa2 =  \
+            all_states2, self.getLocations(), self.getTransitions(), all_states2[0], all_states2[1:]
+        
+        
+        minimised_dfa1 = hp.hopcroft_minimisation(*dfa1)
+        minimised_dfa2 = hp.hopcroft_minimisation(*dfa2)
+
+        (min_states1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
+        (min_states2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
+
+        if len(min_states1) != len(min_states2):
+            return False
+    
+        if min_start1 != min_start2:
+            return False
+        
+        if set(min_accepting1) != set(min_accepting2):
+            return False
+        
+        for state in min_states1:
+            for loc1 in dfa1[1]:  # Locations (alphabet)
+                for loc2 in dfa1[1]:
+                    next_state1 = min_transitions1[state].get((loc1, loc2), None)
+                    next_state2 = min_transitions2[state].get((loc1, loc2), None)
+                    if next_state1 != next_state2:
+                        return False
+                    
+        return True
+                
 class GadgetNetwork(GadgetLike):
     def __init__(self, name="GadgetNetwork"):
         """
@@ -219,9 +256,3 @@ class GadgetNetwork(GadgetLike):
                     combined = self.do_combine(g1, g2, rot)
 
         return combined
-    def canonicalise(self):
-        """
-        Run a DFA minimisation algorithm on the simplified system to remove redundancies.
-        Relabel states, and alphabetise transitions to yield languages.
-        """
-        pass
