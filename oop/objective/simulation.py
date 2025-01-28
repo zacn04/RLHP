@@ -2,7 +2,8 @@
 Author: Zac Nwogwugwu, 2025
 """
 from oop.gadgets.gadgetlike import Gadget, GadgetNetwork
-from oop.gadgets.gadgetdefs import Toggle2
+from oop.gadgets.gadgetdefs import *
+from oop.dfa.hopcroft import hopcroft_minimisation
 
 def do_simulate(gadgets: list[Gadget], combinations, target: Gadget) -> bool:
     """
@@ -36,22 +37,25 @@ def are_dfa_equal(network1, network2):
 ### TESTS ###
 net = GadgetNetwork()
 
-net += Toggle2()
+# Add the first AP2T
+ap2t1 = AntiParallel2Toggle()
+net += ap2t1
 
-net += Toggle2()
+ap2t2 = AntiParallel2Toggle()
+ap2t2.setCurrentState(1)
+net += ap2t2
 
-net.combine(net.subgadgets[0], net.subgadgets[1], rotation=2)
+combined = net.combine(ap2t1, ap2t2, rotation=0)
+
+
+net.connect(combined, 1, 7)  
+net.connect(combined, 4, 2)  
 
 res = net.simplify()
 
+
 net2 = GadgetNetwork()
+net2 += Crossing2Toggle()
+res2 = net2.simplify()
 
-net2 += Toggle2()
-
-net2 += Toggle2()
-
-net.combine(net.subgadgets[1], net.subgadgets[0], rotation=0)
-
-res2 = net.simplify()
-
-print(are_dfa_equal(res, res2))
+print(res == res2)

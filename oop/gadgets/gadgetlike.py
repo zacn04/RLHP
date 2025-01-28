@@ -71,13 +71,14 @@ class Gadget(GadgetLike):
 
         all_states1 = self.getStates()
         dfa1 =  \
-            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1[1:]
+            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1
         all_states2 = other.getStates()
         dfa2 =  \
-            all_states2, self.getLocations(), self.getTransitions(), all_states2[0], all_states2[1:]
+            all_states2, other.getLocations(), other.getTransitions(), all_states2[0], all_states2
         
         
         minimised_dfa1 = hp.hopcroft_minimisation(*dfa1)
+        #print('done with dfa1, onto dfa2')
         minimised_dfa2 = hp.hopcroft_minimisation(*dfa2)
 
         (min_states1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
@@ -97,7 +98,7 @@ class Gadget(GadgetLike):
                 for loc2 in dfa1[1]:
                     next_state1 = min_transitions1[state].get((loc1, loc2), None)
                     next_state2 = min_transitions2[state].get((loc1, loc2), None)
-                    if next_state1 != next_state2:
+                    if next_state1 != next_state2 or not (next_state1 and next_state2):
                         return False
                     
         return True
@@ -136,22 +137,16 @@ class GadgetNetwork(GadgetLike):
         new_transitions = {}
         for state, loc_map in gadget.transitions.items():
             new_loc_map = {}
-            for old_transition, next_state in loc_map.items():
-                locA, locB = old_transition
-                newA = loc2 if locA == loc1 else locA
-                newB = loc2 if locB == loc1 else locB
-                if (newA, newB) in new_loc_map:
-                    if new_loc_map[(newA, newB)] != next_state:
-                        raise ValueError(f"Conflict in transitions \
-                                         for merged location {(newA, newB)}")
-                else:
-                    new_loc_map[(newA, newB)] = next_state
+            for (locA, locB), next_state in loc_map.items():
+                # Replace loc2 with loc1 in transitions
+                newA = loc1 if locA == loc2 else locA
+                newB = loc1 if locB == loc2 else locB
+                new_loc_map[(newA, newB)] = next_state
             new_transitions[state] = new_loc_map
 
 
         gadget.transitions = new_transitions
-        if loc1 in gadget.locations:
-            gadget.locations.remove(loc2)
+        gadget.locations = [loc for loc in gadget.locations if loc != loc2]
 
 
 
@@ -175,56 +170,39 @@ class GadgetNetwork(GadgetLike):
         rotated_gadget2 = Gadget(
             name=f"{rotation}-Rotated {gadget2.name}",
             locations=rotated_locations,
-            states=gadget2.states, #assuming the rorations have no bearings of states
+            states=gadget2.states, #assuming the rotations have no bearings of states
             transitions=gadget2.transitions,
             current_state=gadget2.current_state
             )
+        
         #TODO: implement correct splicing index logic
         offset = len(gadget1.locations)
-        #tacking on things to the end, ignoring splciing index for now.
+        #tacking on things to the end, ignoring splicing index for now.
 
         offset_rotated_locations = [location + offset for location in rotated_gadget2.locations]
 
-        offset_transitions = lambda transitions, offset: {
-        state: {(locA + offset, locB + offset): nxt for (locA, locB), nxt in inner_dict.items()}
-        for state, inner_dict in transitions.items()
-        }
+        offset_transitions = {
+        state: {(locA + offset, locB + offset): next_state for (locA, locB), next_state in inner_dict.items()}
+        for state, inner_dict in rotated_gadget2.transitions.items()
+    }
 
-        offset_rotated_transitions = offset_transitions(rotated_gadget2.transitions, offset)
+        #offset_rotated_transitions = offset_transitions(rotated_gadget2.transitions, offset)
 
-        new_locations = list(gadget1.locations) + offset_rotated_locations
+        new_locations = gadget1.locations + offset_rotated_locations
 
         #after this, we have both transitions, separate. need to combine and not lose any lol
+        new_states = [(s1, s2) for s1 in gadget1.states for s2 in rotated_gadget2.states]
 
-        new_states = []
-        for s1 in gadget1.states:
-            for s2 in rotated_gadget2.states:
-                new_states.append((s1, s2))
         new_transitions = {}
 
-        for state in new_states:
-            new_transitions[state] = {}
+        for (s1, s2) in new_states:
+            new_transitions[(s1, s2)] = {}
 
-            first_state, second_state = state
-            for transition in gadget1.transitions[first_state]:
-                new_transitions[state][transition] = \
-                    (gadget1.transitions[first_state][transition], second_state)
-            for transition in offset_rotated_transitions[second_state]:
-                new_transitions[state][transition] = \
-                    (first_state, offset_rotated_transitions[second_state][transition])
+            for (locA, locB), next_state in gadget1.transitions[s1].items():
+                new_transitions[(s1, s2)][(locA, locB)] = (next_state, s2)
 
-
-        for op in self.operations:
-            if op[0] == "CONNECT":
-                _, _, loc1, loc2 = op
-                if loc1 in gadget1.locations and loc2 in rotated_gadget2.locations:
-                    bridge_loc2 = loc2 + offset
-                    for state_1 in gadget1.states:
-                        for state_2 in rotated_gadget2.states:
-                            combined_state = (state_1, state_2)
-                            if (loc1, bridge_loc2) not in new_transitions[combined_state]:
-                                new_transitions[combined_state][(loc1, bridge_loc2)] = \
-                                    (state_1, state_2)
+            for (locA, locB), next_state in offset_transitions[s2].items():
+                new_transitions[(s1, s2)][(locA, locB)] = (s1, next_state)
 
         new_gadget = Gadget(
         name=f"Combined({gadget1.name}+{gadget2.name})",
@@ -247,9 +225,10 @@ class GadgetNetwork(GadgetLike):
         combined = self.subgadgets[0]
 
         for op in self.operations:
+            #print(op, self.subgadgets)
             match op[0]:
                 case "CONNECT":
-                    _, _, l1, l2 = op
+                    _, gadget, l1, l2 = op
                     self.do_connect(combined, l1, l2)
                 case "COMBINE":
                     _, g1, g2, rot = op

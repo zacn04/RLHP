@@ -33,7 +33,7 @@ class Door(Gadget):
         name = "Door"
         transitions = {
             0: {(0,1): 1},
-            1: {(2,3): 0, (1,0): 1} #traversing an open door stays open, can still close it.
+            1: {(2,3): 0, (1,0): 1, (0,1): 1} #traversing an open door stays open, can still close it.
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -76,12 +76,23 @@ class AntiParallel2Toggle(Gadget):
     """
     def __init__(self):
         locations = [0,1,2,3]
-        states = [0,1,2]
+        states = [0,1]
         name = "AntiParallel 2 Toggle"
         transitions = {
-            0: {(0, 1): 2, (2, 3): 1},
-            1: {(1, 0): 0},
-            2: {(3, 2): 0}
+            0: {(0, 1): 1, (2, 3): 1},
+            1: {(1, 0): 0, (3,2): 0}
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
+
+class Crossing2Toggle(Gadget):
+    def __init__(self):
+        super().__init__(
+            name="Crossing2Toggle",
+            locations=[0, 1, 2, 3],
+            states=[0, 1],
+            transitions={
+                0: {(0, 2): 1, (3, 1): 1},
+                1: {(2, 0): 0, (1, 3): 0}
+            }
+        )
