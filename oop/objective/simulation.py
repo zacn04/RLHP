@@ -78,13 +78,14 @@ print(res2.states)
 net3 = GadgetNetwork()
 # net2 += Crossing2Toggle()
 
-net3 += Crossing2Toggle()
+net3 += Crossing2Toggle() 
 res3 = net3.simplify()
 print(res3.locations)
 print(res3.transitions)
 print(res3.states)
 
 print(res == res2) # should be False
+
 print(res == res3) # should be True
 
 
