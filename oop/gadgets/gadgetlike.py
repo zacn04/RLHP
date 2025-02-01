@@ -6,7 +6,7 @@ Handling the logic for gadget networks.
 from abc import ABC, abstractmethod
 from typing import List, Dict, Tuple
 
-from dfa import hopcroft as hp
+from oop.dfa import hopcroft as hp
 class GadgetLike:
     """
     The base class for gadgets/gadget networks.
@@ -67,6 +67,7 @@ class Gadget(GadgetLike):
     def __getitem__(self, transition): #allows for easier transitions.
         self.traverse(transition[0], transition[1])
 
+    
     def __eq__(self, other):
 
         all_states1 = self.getStates()
@@ -83,6 +84,8 @@ class Gadget(GadgetLike):
 
         (min_states1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
         (min_states2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
+        print(minimised_dfa1)
+        print(minimised_dfa2)
 
         if len(min_states1) != len(min_states2):
             return False
@@ -102,7 +105,7 @@ class Gadget(GadgetLike):
                         return False
                     
         return True
-                
+        
 class GadgetNetwork(GadgetLike):
     def __init__(self, name="GadgetNetwork"):
         """
@@ -135,18 +138,46 @@ class GadgetNetwork(GadgetLike):
             raise ValueError(f"One or both locations not in {gadget.name}")
 
         new_transitions = {}
+        
+        inbound1 = {}
+        outbound1 ={}
+        inbound2 = {}
+        outbound2 = {}
+
         for state, loc_map in gadget.transitions.items():
             new_loc_map = {}
             for (locA, locB), next_state in loc_map.items():
+                
                 # Replace loc2 with loc1 in transitions
-                newA = loc1 if locA == loc2 else locA
-                newB = loc1 if locB == loc2 else locB
-                new_loc_map[(newA, newB)] = next_state
+                if locA != loc2 and locA != loc1 and locB != loc2 and locB != loc1:
+                    new_loc_map[(locA, locB)] = next_state
+
+                if locA == loc2 and locB != loc1:
+                    outbound2.setdefault(state, []).append((locB, next_state))
+
+                if locA == loc1 and locB != loc2:
+                    outbound1.setdefault(state, []).append((locB, next_state))
+                
+                if locB == loc2 and locA != loc1:
+                    inbound2.setdefault(next_state, []).append((locA, state))
+
+                if locB == loc1 and locA != loc2:
+                    inbound1.setdefault(next_state, []).append((locA, state))
+                
             new_transitions[state] = new_loc_map
 
 
+        for state, loc_map in gadget.transitions.items():
+            for (locA, in_state) in inbound1.get(state, []):
+                for (locB, next_state) in outbound2.get(state, []):
+                    new_transitions[in_state][(locA, locB)] = next_state
+            for (locA, in_state) in inbound2.get(state, []):
+                for (locB, next_state) in outbound1.get(state, []):
+                    new_transitions[in_state][(locA, locB)] = next_state
+
+
         gadget.transitions = new_transitions
-        gadget.locations = [loc for loc in gadget.locations if loc != loc2]
+        gadget.locations = [loc for loc in gadget.locations if loc != loc2 and loc != loc1]
 
 
 
@@ -204,6 +235,8 @@ class GadgetNetwork(GadgetLike):
             for (locA, locB), next_state in offset_transitions[s2].items():
                 new_transitions[(s1, s2)][(locA, locB)] = (s1, next_state)
 
+        
+
         new_gadget = Gadget(
         name=f"Combined({gadget1.name}+{gadget2.name})",
         locations=new_locations,
@@ -233,5 +266,10 @@ class GadgetNetwork(GadgetLike):
                 case "COMBINE":
                     _, g1, g2, rot = op
                     combined = self.do_combine(g1, g2, rot)
+        
+        keys_to_remove = [k for k, v in combined.transitions.items() if not v]
+        for k in keys_to_remove:
+            del combined.transitions[k]
+            combined.states.remove(k) 
 
         return combined
