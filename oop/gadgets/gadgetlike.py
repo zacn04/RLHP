@@ -72,20 +72,23 @@ class Gadget(GadgetLike):
 
         all_states1 = self.getStates()
         dfa1 =  \
-            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1
+            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1[1:]
         all_states2 = other.getStates()
         dfa2 =  \
-            all_states2, other.getLocations(), other.getTransitions(), all_states2[0], all_states2
+            all_states2, other.getLocations(), other.getTransitions(), all_states2[0], all_states2[1:]
         
         
         minimised_dfa1 = hp.hopcroft_minimisation(*dfa1)
-        #print('done with dfa1, onto dfa2')
         minimised_dfa2 = hp.hopcroft_minimisation(*dfa2)
 
-        (min_states1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
-        (min_states2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
-        print(minimised_dfa1)
-        print(minimised_dfa2)
+        minimised_dfa1 = hp.normalisation(minimised_dfa1)
+        minimised_dfa2 = hp.normalisation(minimised_dfa2)
+
+        (min_states1, locs1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
+        (min_states2, locs2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
+
+
+        # Ok, technically a DFA does not describe its locations, but this is harmless.
 
         if len(min_states1) != len(min_states2):
             return False
@@ -97,11 +100,11 @@ class Gadget(GadgetLike):
             return False
         
         for state in min_states1:
-            for loc1 in dfa1[1]:  # Locations (alphabet)
-                for loc2 in dfa1[1]:
-                    next_state1 = min_transitions1[state].get((loc1, loc2), None)
-                    next_state2 = min_transitions2[state].get((loc1, loc2), None)
-                    if next_state1 != next_state2 or not (next_state1 and next_state2):
+            for loc1 in locs1:  # Locations (alphabet)
+                for loc2 in locs2:
+                    next_state1 = min_transitions1[state].get((loc1, loc2), -1)
+                    next_state2 = min_transitions2[state].get((loc1, loc2), -1)
+                    if next_state1 != next_state2:
                         return False
                     
         return True

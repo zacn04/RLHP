@@ -73,25 +73,27 @@ def hopcroft_minimisation(states, locations, transitions, start_state, accepting
     minimized_start_state = state_mapping[start_state]
     minimized_accepting_states = {state_mapping[state] for state in accepting_states}
 
-    return minimized_states, minimized_transitions, minimized_start_state, minimized_accepting_states
+    return minimized_states, locations, minimized_transitions, minimized_start_state, minimized_accepting_states
+
+def normalisation(dfa):
+
+    states, locations, transitions, start_state, accepting_states = dfa
+    location_map = {loc:i for i, loc in enumerate(locations)}
+    new_locations = list(location_map.values())
+    new_transitions = {}
+
+    for state in states:
+        new_transitions[state] = {}
+        for transition_tuple, next_state in transitions[state].items():
+            locA, locB = transition_tuple
+            new_transitions[state].update({(location_map[locA], location_map[locB]) : next_state})
+    return states, new_locations, new_transitions, start_state, accepting_states
+
 if __name__ == "__main__":
-    states = [(0, 0), (0, 1), (1, 0), (1, 1)]
-    locations = [0, 1, 2, 3]
-    transitions = {
-        (0, 0): {(0, 1): (1, 0), (3, 2): (1, 0), (4, 5): (0, 1), (7, 6): (0, 1)},
-        (0, 1): {(0, 1): (1, 1), (3, 2): (1, 1), (5, 4): (0, 0), (6, 7): (0, 0)},
-        (1, 0): {(1, 0): (0, 0), (2, 3): (0, 0), (4, 5): (1, 1), (7, 6): (1, 1)},
-        (1, 1): {(1, 0): (0, 1), (2, 3): (0, 1), (5, 4): (1, 0), (6, 7): (1, 0)}
-    }
-    start_state = (0, 0)
-    accepting_states = [(0, 1), (1, 0), (1, 1)]
+    
+    x = normalisation(([0, 1], [0,1,2,3], {0: {(1, 0): 1, (3, 2): 1}, 1: {(0, 1): 0, (2, 3): 0}}, 1, {0}))
+    y = normalisation(([0, 1], [0,3,4,7], {0: {(4, 0): 1, (3, 7): 1}, 1: {(0, 4): 0, (7, 3): 0}}, 1, {0}))
+    z = normalisation(([0, 1], [0,1,2,3], {0: {(2, 0): 1, (1, 3): 1}, 1: {(0, 2): 0, (3, 1): 0}}, 1, {0}))
+    a = normalisation(([0, 1], [0,3,4,7], {0: {(4, 0): 1, (3, 7): 1}, 1: {(0, 4): 0, (7, 3): 0}}, 1, {0}))
 
-    # Minimize the DFA using Hopcroft's algorithm
-    minimized_states, minimized_transitions, minimized_start_state, minimized_accepting_states = \
-        hopcroft_minimisation(states, locations, transitions, start_state, accepting_states)
-
-    # Output the minimized DFA
-    print("Minimized States:", minimized_states)
-    print("Minimized Transitions:", minimized_transitions)
-    print("Minimized Start State:", minimized_start_state)
-    print("Minimized Accepting States:", minimized_accepting_states)
+    print(x, y, z, a, sep="\n")
