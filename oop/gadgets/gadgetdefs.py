@@ -7,9 +7,9 @@ This will most likely be defining our toolkit for gadgets.
 from oop.gadgets.gadgetlike import Gadget
 #LOCATIONS MUST BE CLOCKWISE!
 
-class Toggle2Locking(Gadget):
+class ParallelLocking2Toggle(Gadget):
     """
-    Locking 2 Toggle Gadget.
+    Parallel Locking 2 Toggle Gadget. (PL2T)
     """
     def __init__(self):
         locations = [0,1,2,3]
@@ -96,3 +96,29 @@ class Crossing2Toggle(Gadget):
                 1: {(2, 0): 0, (1, 3): 0}
             }
         )
+
+class AntiParallelLocking2Toggle(Gadget):
+   def __init__(self):
+       locations = [0, 1, 2, 3]  
+       states = [0, 1, 2]        
+       name = "APL2T"
+       transitions = {
+           0: {(0, 1): 1,    
+               (2, 3): 2},
+           1: {(1, 0): 0},   
+           2: {(3, 2): 0}    
+       }
+       super().__init__(name, locations, states, transitions)
+
+class CrossingLocking2Toggle(Gadget):
+   def __init__(self):
+       locations = [0, 1, 2, 3]  
+       states = [0, 1, 2]        
+       name = "CL2T"
+       transitions = {
+           0: {(0, 2): 1,    
+               (3, 1): 2},   
+           1: {(2, 0): 0},   
+           2: {(1, 3): 0}   
+       }
+       super().__init__(name, locations, states, transitions)

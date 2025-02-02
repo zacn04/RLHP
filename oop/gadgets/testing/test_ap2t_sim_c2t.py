@@ -30,4 +30,4 @@ def test_ap2t_sim_c2t():
     res2 = net2.simplify()
 
 
-    assert(res == res2) # should be False
+    assert(res == res2)

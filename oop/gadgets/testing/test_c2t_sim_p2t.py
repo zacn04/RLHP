@@ -3,7 +3,6 @@ from oop.gadgets.gadgetlike import GadgetNetwork
 
 
 def test_c2t_sim_p2t():
-    """Test that C2Ts can simulate a P2T (from Lemma 4.3)"""
     net = GadgetNetwork()
 
     # Add the first AP2T
