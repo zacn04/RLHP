@@ -186,14 +186,7 @@ class GadgetNetwork(GadgetLike):
 
 
     def do_combine(self, gadget1, gadget2, rotation, splicing_index=-1):
-        # Rotate right side gadget per rotation
-        # then create a new gadget with the same transitions
-        # but with a rearrangement of locations per splicing index
 
-        # Rotation
-        # Seems trivial, just maintain states but change each location modulo rotation?
-
-        #Actually i dont think location really impacts state changes...
 
         modulo_index = len(gadget2.locations)
         rotated_locations = [((location + rotation) % modulo_index + splicing_index+1) for location in gadget2.locations]
@@ -211,18 +204,6 @@ class GadgetNetwork(GadgetLike):
             current_state=gadget2.current_state
             )
         
-        #TODO: implement correct splicing index logic
-        # offset = len(gadget1.locations)
-        #tacking on things to the end, ignoring splicing index for now.
-
-        # offset_rotated_locations = [location + offset for location in rotated_gadget2.locations]
-
-    #     offset_transitions = {
-    #     state: {(locA + offset, locB + offset): next_state for (locA, locB), next_state in inner_dict.items()}
-    #     for state, inner_dict in rotated_gadget2.transitions.items()
-    # }
-
-        #offset_rotated_transitions = offset_transitions(rotated_gadget2.transitions, offset)
 
         new_locations = gadget1.locations[:splicing_index+1] + rotated_gadget2.locations + [location+modulo_index for location in gadget1.locations[splicing_index+1:]]
 
@@ -251,11 +232,7 @@ class GadgetNetwork(GadgetLike):
         transitions=new_transitions,
         current_state=(gadget1.current_state, gadget2.current_state)
         )
-        # print(new_locations)
-        # print(new_transitions)
-        # print(new_states)
 
-        #self.operations.append("COMBINE", gadget1, gadget2, rotation)
         return new_gadget
 
     def simplify(self):
@@ -267,7 +244,6 @@ class GadgetNetwork(GadgetLike):
         combined = self.subgadgets[0]
 
         for op in self.operations:
-            #print(op, self.subgadgets)
             match op[0]:
                 case "CONNECT":
                     _, gadget, l1, l2 = op
