@@ -23,37 +23,12 @@ def test_c2t_sim_p2t():
 
 
     net2 = GadgetNetwork()
-    # net2 += Crossing2Toggle()
 
     net2 += Toggle2()
 
 
     res2 = net2.simplify()
 
-
-
-
-    # # net3 = GadgetNetwork()
-    # # # net2 += Crossing2Toggle()
-
-    # # net3 += Toggle2Locking()
-    # # res3 = net3.simplify()
-
-
-
-    print(res.states)
-    print(res.locations)
-    print(res.transitions)
-
-    print(res2.states)
-    print(res2.locations)
-    print(res2.transitions)
-
-
-
-    # # print(res3.states)
-    # # print(res3.locations)
-    # # print(res3.transitions)
 
 
     assert(res == res2) # should be True
