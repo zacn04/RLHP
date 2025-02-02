@@ -107,61 +107,43 @@ class Gadget(GadgetLike):
     def __eq__(self, other):
 
         all_states1 = self.getStates()
-        states1 = all_states1
-        locations1 = self.getLocations()
-        transitions1 = self.getTransitions()
-        start_state1 = all_states1[0]
-        accepting_states1 = all_states1
-
+        dfa1 =  \
+            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1[1:]
         all_states2 = other.getStates()
-        states2 = all_states2
-        locations2 = other.getLocations()
-        transitions2 = other.getTransitions()
-        start_state2 = all_states2[0]
-        accepting_states2 = all_states2
+        dfa2 =  \
+            all_states2, other.getLocations(), other.getTransitions(), all_states2[0], all_states2[1:]
+        
+        
+        minimised_dfa1 = hp.hopcroft_minimisation(*dfa1)
+        minimised_dfa2 = hp.hopcroft_minimisation(*dfa2)
 
-        minimised_dfa1 = hp.hopcroft_minimisation(states1, locations1, transitions1, start_state1, accepting_states1)
-        minimised_dfa2 = hp.hopcroft_minimisation(states2, locations2, transitions2, start_state2, accepting_states2)
+        minimised_dfa1 = hp.normalisation(minimised_dfa1)
+        minimised_dfa2 = hp.normalisation(minimised_dfa2)
 
-        (min_states1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
-        (min_states2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
+        (min_states1, locs1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
+        (min_states2, locs2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
+
+
+        # Ok, technically a DFA does not describe its locations, but this is harmless.
 
         if len(min_states1) != len(min_states2):
             return False
-
-        # Create maps from location values to their indices
-        loc_to_idx1 = {loc: idx for idx, loc in enumerate(locations1)}
-        loc_to_idx2 = {loc: idx for idx, loc in enumerate(locations2)}
-
-        def get_transition_pattern(trans, state, loc_to_idx):
-            # Convert transitions to use location indices instead of values
-            pattern = {}
-            for (in1, in2), target in trans[state].items():
-                idx1 = loc_to_idx[in1]
-                idx2 = loc_to_idx[in2]
-                pattern[(idx1, idx2)] = target
-            return pattern
-
-        def try_mapping(mapping, used_states2, state1):
-            if state1 not in mapping:
-                pattern1 = get_transition_pattern(min_transitions1, state1, loc_to_idx1)
-                for state2 in min_states2:
-                    if state2 not in used_states2:
-                        pattern2 = get_transition_pattern(min_transitions2, state2, loc_to_idx2)
-                        # Check if patterns match after converting to indices
-                        if pattern1.keys() == pattern2.keys():
-                            mapping[state1] = state2
-                            used_states2.add(state2)
-                            if len(mapping) == len(min_states1) or all(try_mapping(mapping, used_states2, s) for s in min_states1 if s not in mapping):
-                                return True
-                            mapping.pop(state1)
-                            used_states2.remove(state2)
-                return False
-            return True
-
-        initial_mapping = {}
-        used_states2 = set()
-        return try_mapping(initial_mapping, used_states2, list(min_states1)[0])
+    
+        if min_start1 != min_start2:
+            return False
+        
+        if set(min_accepting1) != set(min_accepting2):
+            return False
+        
+        for state in min_states1:
+            for loc1 in locs1:  # Locations (alphabet)
+                for loc2 in locs2:
+                    next_state1 = min_transitions1[state].get((loc1, loc2), -1)
+                    next_state2 = min_transitions2[state].get((loc1, loc2), -1)
+                    if next_state1 != next_state2:
+                        return False
+                    
+        return True
         
 class GadgetNetwork(GadgetLike):
     def __init__(self, name="GadgetNetwork"):
