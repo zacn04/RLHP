@@ -56,7 +56,7 @@ class SelfClosingDoor(Gadget):
 
 class Toggle2(Gadget):
     """
-    2 Toggle Gadget.
+    Parallel 2 Toggle Gadget.
     """
     #both tunnels flip when you go through.
     def __init__(self):
