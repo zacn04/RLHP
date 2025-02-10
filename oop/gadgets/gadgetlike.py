@@ -134,8 +134,8 @@ class GadgetNetwork(GadgetLike):
         self.subgadgets.append(other)
         return self
 
-    def connect(self, gadget_index, loc1, loc2):
-        self.operations.append(("CONNECT", gadget_index, loc1, loc2))
+    def connect(self, gadget, loc1, loc2):
+        self.operations.append(("CONNECT", gadget, loc1, loc2))
 
     def combine(self, gadget1_index,gadget2_index, rotation, splicing_index=-1):
         self.operations.append(("COMBINE", gadget1_index, gadget2_index, rotation, splicing_index))
