@@ -13,7 +13,11 @@ def test_ap2t_sim_c2t():
     ap2t2.setCurrentState(1)
     net += ap2t2
 
-    combined = net.combine(ap2t1, ap2t2, rotation=0, splicing_index=3)
+    print(net)
+
+    combined = net.combine(0, 1, rotation=0, splicing_index=3)
+
+    print(combined, type(combined))
 
 
     net.connect(combined, 1, 5)  

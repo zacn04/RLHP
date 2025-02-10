@@ -41,7 +41,7 @@ class Gadget(GadgetLike):
         self.transitions = transitions
         self.current_state = current_state
 
-    def __repr__(self):
+    def __str__(self):
         return f"{self.name}"
     def traverse(self, in_location, out_location):
         #Generalised traversal logic
@@ -118,6 +118,12 @@ class GadgetNetwork(GadgetLike):
         self.subgadgets = []
         self.operations = []
 
+    def __str__(self):
+        res = ""
+        for i,s in enumerate(self.subgadgets):
+            res += f"{i}: {s} \n"
+        return res
+
 
     #TODO: find a way to index the subgadgets nicely..
 
@@ -128,22 +134,21 @@ class GadgetNetwork(GadgetLike):
         self.subgadgets.append(other)
         return self
 
-    def connect(self, gadget, loc1, loc2):
-        self.operations.append(("CONNECT", gadget, loc1, loc2))
+    def connect(self, gadget_index, loc1, loc2):
+        self.operations.append(("CONNECT", gadget_index, loc1, loc2))
 
-    def combine(self, gadget1,gadget2, rotation, splicing_index=-1):
-        self.operations.append(("COMBINE", gadget1, gadget2, rotation, splicing_index))
+    def combine(self, gadget1_index,gadget2_index, rotation, splicing_index=-1):
+        self.operations.append(("COMBINE", gadget1_index, gadget2_index, rotation, splicing_index))
 
     def do_connect(self, gadget, loc1, loc2):
         #Assuming that we can only connect within the same gadget. We modify this gadget in place.
-
         if loc1 not in gadget.locations or loc2 not in gadget.locations:
             raise ValueError(f"One or both locations not in {gadget.name}")
 
         new_transitions = {}
         
         inbound1 = {}
-        outbound1 ={}
+        outbound1 = {}
         inbound2 = {}
         outbound2 = {}
 
@@ -185,8 +190,10 @@ class GadgetNetwork(GadgetLike):
 
 
 
-    def do_combine(self, gadget1, gadget2, rotation, splicing_index=-1):
+    def do_combine(self, gadget1_index, gadget2_index, rotation, splicing_index=-1):
 
+        gadget1 = self.subgadgets[gadget1_index]
+        gadget2 = self.subgadgets[gadget2_index]
 
         modulo_index = len(gadget2.locations)
         rotated_locations = [((location + rotation) % modulo_index + splicing_index+1) for location in gadget2.locations]

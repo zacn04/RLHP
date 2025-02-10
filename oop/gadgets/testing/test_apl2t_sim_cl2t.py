@@ -13,7 +13,7 @@ def test_apl2t_sim_cl2t():
     net += apl2t2
     
     
-    combined = net.combine(apl2t1, apl2t2, rotation=2, splicing_index=3)
+    combined = net.combine(0, 1, rotation=2, splicing_index=3)
     
     
     net.connect(combined, 1, 6)  
