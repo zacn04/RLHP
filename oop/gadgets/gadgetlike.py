@@ -202,7 +202,6 @@ class GadgetNetwork(GadgetLike):
             new_loc_map = {}
             for (locA, locB), next_state in loc_map.items():
                 
-                # Replace loc2 with loc1 in transitions
                 if locA != loc2 and locA != loc1 and locB != loc2 and locB != loc1:
                     new_loc_map[(locA, locB)] = next_state
 
