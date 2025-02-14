@@ -69,48 +69,91 @@ class Gadget(GadgetLike):
 
     
     def __eq__(self, other):
-
+        """Compare gadgets by minimizing and comparing their DFA representations."""
+    
+        def flatten_states(states, transitions):
+            """Convert states (both simple and tuple) to simple numeric states."""
+            state_map = {state: i for i, state in enumerate(states)}
+            new_transitions = {}
+            
+            for state in states:
+                new_transitions[state_map[state]] = {}
+                state_transitions = transitions.get(state, {})
+                
+                for (loc1, loc2), next_state in state_transitions.items():
+                    # Convert next_state if it's a tuple
+                    if isinstance(next_state, tuple) and next_state in state_map:
+                        mapped_next = state_map[next_state]
+                    # Handle simple integer states
+                    elif isinstance(next_state, int) and next_state in state_map:
+                        mapped_next = state_map[next_state]
+                    else:
+                        print(f"Warning: Unmapped state {next_state} found in transitions")
+                        continue
+                        
+                    new_transitions[state_map[state]][(loc1, loc2)] = mapped_next
+            
+            
+            return (
+                list(range(len(states))),
+                new_transitions,
+                state_map[states[0]],
+                [state_map[s] for s in states[1:]]
+            )
+    
+        # Get states and check if empty
         all_states1 = self.getStates()
         if not all_states1:
             return False
-        dfa1 =  \
-            all_states1, self.getLocations(), self.getTransitions(), all_states1[0], all_states1[1:]
+            
         all_states2 = other.getStates()
-        if not all_states2: return False
-        dfa2 =  \
-            all_states2, other.getLocations(), other.getTransitions(), all_states2[0], all_states2[1:]
-        
-        
-        minimised_dfa1 = hp.hopcroft_minimisation(*dfa1)
-        minimised_dfa2 = hp.hopcroft_minimisation(*dfa2)
-
-        minimised_dfa1 = hp.normalisation(minimised_dfa1)
-        minimised_dfa2 = hp.normalisation(minimised_dfa2)
-
-        (min_states1, locs1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
-        (min_states2, locs2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
-
-
-        # Ok, technically a DFA does not describe its locations, but this is harmless.
-
-        if len(min_states1) != len(min_states2):
-            return False
-    
-        if min_start1 != min_start2:
+        if not all_states2:
             return False
         
-        if set(min_accepting1) != set(min_accepting2):
-            return False
         
-        for state in min_states1:
-            for loc1 in locs1:  # Locations (alphabet)
-                for loc2 in locs2:
-                    next_state1 = min_transitions1[state].get((loc1, loc2), -1)
-                    next_state2 = min_transitions2[state].get((loc1, loc2), -1)
-                    if next_state1 != next_state2:
-                        return False
-                    
-        return True
+        try:
+            # Flatten compound states if present
+            states1, transitions1, start1, accepting1 = flatten_states(all_states1, self.getTransitions())
+            states2, transitions2, start2, accepting2 = flatten_states(all_states2, other.getTransitions())
+            
+            # Create DFAs with flattened states
+            dfa1 = (states1, self.getLocations(), transitions1, start1, accepting1)
+            dfa2 = (states2, other.getLocations(), transitions2, start2, accepting2)
+            
+            # Rest of comparison logic...
+            minimised_dfa1 = hp.hopcroft_minimisation(*dfa1)
+            minimised_dfa2 = hp.hopcroft_minimisation(*dfa2)
+            minimised_dfa1 = hp.normalisation(minimised_dfa1)
+            minimised_dfa2 = hp.normalisation(minimised_dfa2)
+            
+            (min_states1, locs1, min_transitions1, min_start1, min_accepting1) = minimised_dfa1
+            (min_states2, locs2, min_transitions2, min_start2, min_accepting2) = minimised_dfa2
+            
+            if len(min_states1) != len(min_states2):
+                return False
+                
+            if min_start1 != min_start2:
+                return False
+                
+            if set(min_accepting1) != set(min_accepting2):
+                return False
+                
+            for state in min_states1:
+                for loc1 in locs1:
+                    for loc2 in locs2:
+                        next_state1 = min_transitions1[state].get((loc1, loc2), -1)
+                        next_state2 = min_transitions2[state].get((loc1, loc2), -1)
+                        if next_state1 != next_state2:
+                            return False
+                            
+            return True
+            
+        except Exception as e:
+            print(f"Error in gadget comparison: {str(e)}")
+            print(f"Current state context:")
+            print(f"States 1: {all_states1}")
+            print(f"States 2: {all_states2}")
+            return False
         
 class GadgetNetwork(GadgetLike):
     def __init__(self, name="GadgetNetwork"):

@@ -5,7 +5,7 @@ from collections import deque
 from copy import deepcopy
 import random
 
-from oop.gadgets.gadgetdefs import AntiParallel2Toggle, Crossing2Toggle
+from oop.gadgets.gadgetdefs import AntiParallel2Toggle, Crossing2Toggle, Door, SelfClosingDoor
 from oop.gadgets.gadgetlike import Gadget, GadgetNetwork
 
 class SearchStrategy(Enum):
@@ -253,8 +253,8 @@ def search_step(network: GadgetNetwork,
 def find_simulation(initial_gadgets: List[Gadget], 
                    target_gadget: Gadget,
                    strategy: SearchStrategy = SearchStrategy.DFS,
-                   max_depth: int = 4,
-                   max_attempts: int = 1000,
+                   max_depth: int = 10,
+                   max_attempts: int = 10000,
                    verbose: bool = False) -> Optional[List[Tuple]]:
     """
     Find a sequence of operations to simulate target_gadget using initial_gadgets.
@@ -268,8 +268,6 @@ def find_simulation(initial_gadgets: List[Gadget],
         verbose: If True, print detailed progress information
     """
     for state_combo in product(*[g.getStates() for g in initial_gadgets]):
-        if verbose:
-            print(f"\nTrying initial states: {state_combo}")
             
         network = GadgetNetwork()
         for gadget, state in zip(initial_gadgets, state_combo):
@@ -277,11 +275,6 @@ def find_simulation(initial_gadgets: List[Gadget],
             new_gadget.setCurrentState(state)
             network += new_gadget
             
-        if verbose:
-            print("Initial configuration:")
-            for i, gadget in enumerate(network.subgadgets):
-                print(f"\nGadget {i}:")
-                print(print_gadget_definition(gadget))
                 
         operations = search_step(network, target_gadget, strategy, 
                                max_depth, max_attempts, verbose)
@@ -316,21 +309,91 @@ def find_simulation(initial_gadgets: List[Gadget],
 
 # Example usage:
 
+from oop.gadgets.gadgetdefs import (
+    AntiParallel2Toggle, Crossing2Toggle,
+    AntiParallelLocking2Toggle, CrossingLocking2Toggle,
+    Toggle2, ParallelLocking2Toggle,
+    Door, SelfClosingDoor
+)
+
+def run_all_strategies(initial_gadgets, target, name="Test"):
+    print(f"\n=== {name} ===")
+    
+    print("\nDFS:")
+    dfs_ops = find_simulation(initial_gadgets, target, 
+                            strategy=SearchStrategy.DFS, verbose=True)
+    
+    print("\nBFS:")
+    bfs_ops = find_simulation(initial_gadgets, target, 
+                            strategy=SearchStrategy.BFS, verbose=True)
+    
+    print("\nRandom:")
+    random_ops = find_simulation(initial_gadgets, target, 
+                              strategy=SearchStrategy.RANDOM, verbose=True)
+    
+    return dfs_ops, bfs_ops, random_ops
+
+# Test Case 1: AP2T → C2T (known possible)
 ap2t1 = AntiParallel2Toggle()
 ap2t2 = AntiParallel2Toggle()
 target = Crossing2Toggle()
+ops1 = run_all_strategies([ap2t1, ap2t2], target, "AP2T to C2T")
 
-# Try DFS
-print("DFS:")
-operations = find_simulation([ap2t1, ap2t2], target, 
-                           strategy=SearchStrategy.DFS, verbose=True)
+# Test Case 2: APL2T → CL2T (locking variant)
+apl2t1 = AntiParallelLocking2Toggle()
+apl2t2 = AntiParallelLocking2Toggle()
+target = CrossingLocking2Toggle()
+ops2 = run_all_strategies([apl2t1, apl2t2], target, "APL2T to CL2T")
 
-# Try BFS
-print("BFS:")
-operations = find_simulation([ap2t1, ap2t2], target, 
-                           strategy=SearchStrategy.BFS, verbose=True)
+# Test Case 3: C2T → P2T (Crossing to Parallel)
+c2t1 = Crossing2Toggle()
+c2t2 = Crossing2Toggle()
+target = Toggle2()
+ops3 = run_all_strategies([c2t1, c2t2], target, "C2T to P2T")
 
-# Try Random
-print("Random:")
-operations = find_simulation([ap2t1, ap2t2], target, 
-                           strategy=SearchStrategy.RANDOM, verbose=True)
+# Test Case 4: CL2T → PL2T (Crossing Locking to Parallel Locking)
+cl2t1 = CrossingLocking2Toggle()
+cl2t2 = CrossingLocking2Toggle()
+target = ParallelLocking2Toggle()
+ops4 = run_all_strategies([cl2t1, cl2t2], target, "CL2T to PL2T")
+
+# Test Case 5: Door → SelfClosingDoor (different type of gadget)
+door1 = SelfClosingDoor()
+door2 = SelfClosingDoor()
+target = SelfClosingDoor()
+ops5 = run_all_strategies([door1, door2], target, "Door to SelfClosingDoor")
+
+# Test Case 6: Mix of three gadgets
+ap2t1 = AntiParallel2Toggle()
+ap2t2 = AntiParallel2Toggle()
+ap2t3 = AntiParallel2Toggle()
+target = Crossing2Toggle()
+ops6 = run_all_strategies([ap2t1, ap2t2, ap2t3], target, "Three AP2Ts to C2T")
+
+# Print all solutions found
+for i, (test_name, ops) in enumerate([
+    ("AP2T to C2T", ops1),
+    ("APL2T to CL2T", ops2),
+    ("C2T to P2T", ops3),
+    ("CL2T to PL2T", ops4),
+    ("SelfClosingDoor to Door", ops5),
+    ("Three AP2Ts to C2T", ops6)
+]):
+    print(f"\n=== Solutions for {test_name} ===")
+    dfs_ops, bfs_ops, random_ops = ops
+    
+    print("\nDFS solution:", "Found" if dfs_ops else "Not found")
+    if dfs_ops:
+        for op in dfs_ops:
+            print(f"  {format_operation(op)}")
+            
+    print("\nBFS solution:", "Found" if bfs_ops else "Not found")
+    if bfs_ops:
+        for op in bfs_ops:
+            print(f"  {format_operation(op)}")
+            
+    print("\nRandom solution:", "Found" if random_ops else "Not found")
+    if random_ops:
+        for op in random_ops:
+            print(f"  {format_operation(op)}")
+    
