@@ -80,130 +80,152 @@ class Gadget(GadgetLike):
     
     def __eq__(self, other):
         """
-        Compare gadgets for behavioral equivalence, accounting for possible location
-        isomorphism and state equivalence.
+        Compare gadgets for behavioral equivalence using list-based Hopcroft minimization
+        followed by isomorphism testing.
         """
-        # Quick preliminary checks
-        all_states1 = self.getStates()
-        all_states2 = other.getStates()
-        
-        if not all_states1 or not all_states2:
-            return False
-        
-        if len(all_states1) != len(all_states2):
-            return False
-            
-        # Get transitions and locations
-        transitions1 = self.getTransitions()
-        transitions2 = other.getTransitions()
+        # Quick rejection tests
+        states1 = self.getStates()
+        states2 = other.getStates()
         locs1 = self.getLocations()
         locs2 = other.getLocations()
         
-        # If locations don't match in count, can't be equivalent
+        if not states1 or not states2:
+            return False
+        
         if len(locs1) != len(locs2):
             return False
         
-        # Try every possible mapping of locations to see if we can find an isomorphism
+        try:
+            # Get reachable parts of both gadgets (important for combined gadgets)
+            reachable_self = self._get_reachable_gadget()
+            reachable_other = other._get_reachable_gadget()
+            
+            # Prepare DFAs for minimization (no need to convert to dict format)
+            dfa1 = (
+                reachable_self.getStates(), 
+                reachable_self.getLocations(), 
+                reachable_self.getTransitions(), 
+                reachable_self.current_state, 
+                reachable_self.getStates()[1:] if len(reachable_self.getStates()) > 1 else []
+            )
+            
+            dfa2 = (
+                reachable_other.getStates(), 
+                reachable_other.getLocations(), 
+                reachable_other.getTransitions(), 
+                reachable_other.current_state, 
+                reachable_other.getStates()[1:] if len(reachable_other.getStates()) > 1 else []
+            )
+            
+            # Use your list-based Hopcroft minimization
+            min_dfa1 = hp.list_hopcroft_minimisation(*dfa1)
+            min_dfa2 = hp.list_hopcroft_minimisation(*dfa2)
+            
+            # Normalize location numbering for comparison
+            norm_dfa1 = hp.list_normalisation(min_dfa1)
+            norm_dfa2 = hp.list_normalisation(min_dfa2)
+            
+            # Check isomorphism between the minimized DFAs
+            return self._are_dfas_isomorphic(norm_dfa1, norm_dfa2)
+            
+        except Exception as e:
+            print(f"Error in gadget comparison: {str(e)}")
+            print(f"Current state context:")
+            print(f"States 1: {states1}")
+            print(f"States 2: {states2}")
+            return False
+
+    def _get_reachable_gadget(self):
+        """Extract only the reachable portion of a gadget from its current state."""
+        transitions = self.getTransitions()
+        
+        # Find reachable states through BFS
+        reachable = set([self.current_state])
+        frontier = [self.current_state]
+        
+        while frontier:
+            state = frontier.pop(0)
+            for _, _, next_state in transitions.get(state, []):
+                if next_state not in reachable:
+                    reachable.add(next_state)
+                    frontier.append(next_state)
+        
+        # Create filtered transitions dict with only reachable states
+        reachable_transitions = {}
+        for state in reachable:
+            reachable_transitions[state] = transitions.get(state, [])
+        
+        # Create a new gadget with only reachable states
+        return Gadget(
+            name=f"Reachable({self.name})",
+            locations=self.locations,
+            states=list(reachable),
+            transitions=reachable_transitions,
+            current_state=self.current_state
+        )
+
+    def _are_dfas_isomorphic(self, dfa1, dfa2):
+        """
+        Check if two minimized DFAs are isomorphic, accounting for
+        different location numbering.
+        """
+        (states1, locs1, trans1, start1, accept1) = dfa1
+        (states2, locs2, trans2, start2, accept2) = dfa2
+        
+        # Basic structure checks
+        if len(states1) != len(states2) or len(locs1) != len(locs2):
+            return False
+            
+        if start1 != start2:
+            return False
+            
+        if set(accept1) != set(accept2):
+            return False
+        
+        # Try all possible mappings of locations
         import itertools
         
-        # Generate all possible location mappings
-        for loc_mapping in itertools.permutations(locs2, len(locs1)):
-            # Create a dictionary mapping from locs1 to the current permutation of locs2
-            location_map = {locs1[i]: loc_mapping[i] for i in range(len(locs1))}
+        for loc_perm in itertools.permutations(locs2, len(locs1)):
+            # Create location mapping
+            loc_map = {locs1[i]: loc_perm[i] for i in range(len(locs1))}
             
-            # Check if this mapping creates equivalent behavior
-            if self._check_behavioral_equivalence(transitions1, transitions2, location_map, all_states1, all_states2):
+            # Check if this mapping makes the transitions equivalent
+            if self._check_transition_equivalence(states1, trans1, trans2, loc_map):
                 return True
                 
         return False
+
+    def _check_transition_equivalence(self, states, trans1, trans2, loc_map):
+        """Check if transitions are equivalent under the given location mapping."""
+        # Convert list-based transitions to dictionaries for easier comparison
+        dict_trans1 = {}
+        dict_trans2 = {}
         
-    def _check_behavioral_equivalence(self, transitions1, transitions2, location_map, states1, states2):
-        """
-        Check if the gadgets have equivalent behavior under the given location mapping.
-        """
-        # Build a mapping between states based on transition behavior
-        state_map = {}
-        reverse_state_map = {}
-        
-        # For each state in gadget1, try to find an equivalent state in gadget2
-        for s1 in states1:
-            if s1 in state_map:
-                continue
+        for state in states:
+            dict_trans1[state] = {}
+            dict_trans2[state] = {}
+            
+            # Convert transitions for the first DFA
+            for loc1, loc2, next_state in trans1.get(state, []):
+                dict_trans1[state][(loc1, loc2)] = next_state
                 
-            # Quick check: count transitions for this state
-            trans_count1 = len(transitions1.get(s1, []))
-            
-            # For each unmapped state in gadget2, check if behavior matches
-            for s2 in states2:
-                if s2 in reverse_state_map:
-                    continue
-                    
-                # Compare transition count first (quick rejection)
-                if trans_count1 != len(transitions2.get(s2, [])):
-                    continue
-                    
-                # Create copies of state maps for this attempt
-                temp_state_map = state_map.copy()
-                temp_reverse_map = reverse_state_map.copy()
-                
-                # Try mapping s1 to s2
-                temp_state_map[s1] = s2
-                temp_reverse_map[s2] = s1
-                
-                if self._transitions_match(transitions1.get(s1, []), transitions2.get(s2, []), 
-                                        location_map, temp_state_map, temp_reverse_map):
-                    # Update the maps
-                    state_map = temp_state_map
-                    reverse_state_map = temp_reverse_map
-                    break
-            
-        # If we couldn't map all states, the gadgets aren't equivalent
-        return len(state_map) == len(states1)
+            # Convert transitions for the second DFA
+            for loc1, loc2, next_state in trans2.get(state, []):
+                dict_trans2[state][(loc1, loc2)] = next_state
         
-    def _transitions_match(self, trans1, trans2, location_map, state_map, reverse_state_map):
-        """
-        Check if transitions match under the given mapping.
-        """
-        # If the number of transitions doesn't match, they can't be equivalent
-        if len(trans1) != len(trans2):
-            return False
+        # Check transition equivalence
+        for state in states:
+            # Map transitions from dfa1 to how they'd appear in dfa2
+            mapped_trans = {}
+            for (loc1_in, loc1_out), next_state in dict_trans1[state].items():
+                mapped_loc_in = loc_map[loc1_in]
+                mapped_loc_out = loc_map[loc1_out]
+                mapped_trans[(mapped_loc_in, mapped_loc_out)] = next_state
             
-        # Create copies to avoid modifying the originals
-        state_map_copy = state_map.copy()
-        reverse_state_map_copy = reverse_state_map.copy()
-        
-        # Map transitions from gadget1 to how they'd appear in gadget2
-        mapped_trans1 = []
-        for loc1_in, loc1_out, next_state1 in trans1:
-            mapped_loc_in = location_map[loc1_in]
-            mapped_loc_out = location_map[loc1_out]
-            mapped_trans1.append((mapped_loc_in, mapped_loc_out, next_state1))
-            
-        # Check if all transitions in gadget2 have a match
-        for loc2_in, loc2_out, next_state2 in trans2:
-            # Try to find a matching transition
-            found_match = False
-            for mapped_in, mapped_out, next_state1 in mapped_trans1:
-                if loc2_in == mapped_in and loc2_out == mapped_out:
-                    # Check state compatibility
-                    if next_state1 in state_map_copy:
-                        if state_map_copy[next_state1] == next_state2:
-                            found_match = True
-                            break
-                    elif next_state2 not in reverse_state_map_copy:
-                        # Create new state mapping
-                        state_map_copy[next_state1] = next_state2
-                        reverse_state_map_copy[next_state2] = next_state1
-                        found_match = True
-                        break
-                        
-            if not found_match:
+            # Compare mapped transitions with dfa2's transitions
+            if mapped_trans != dict_trans2[state]:
                 return False
                 
-        # If all transitions match, update the state maps
-        state_map.update(state_map_copy)
-        reverse_state_map.update(reverse_state_map_copy)
-        
         return True
         
 class GadgetNetwork(GadgetLike):
