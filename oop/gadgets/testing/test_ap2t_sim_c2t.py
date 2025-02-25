@@ -20,7 +20,7 @@ def test_ap2t_sim_c2t():
     print(combined, type(combined))
 
 
-    net.connect(combined, 1, 5)  
+    net.connect(combined, 0, 4)  
     net.connect(combined, 2, 6)  
 
     res = net.simplify()
@@ -35,3 +35,6 @@ def test_ap2t_sim_c2t():
 
 
     assert(res == res2)
+
+
+test_ap2t_sim_c2t()
