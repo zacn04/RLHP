@@ -361,8 +361,13 @@ class GadgetNetwork(GadgetLike):
         for op in self.operations:
             match op[0]:
                 case "CONNECT":
-                    _, gadget, l1, l2 = op
-                    self.do_connect(combined, l1, l2)
+                    _, gadget_index, l1, l2 = op
+                    # Convert the gadget index to a gadget object
+                    if isinstance(gadget_index, int):
+                        gadget = self.subgadgets[gadget_index]
+                    else:
+                        gadget = gadget_index
+                    self.do_connect(gadget, l1, l2)
                 case "COMBINE":
                     _, g1, g2, rot, smth = op
                     combined = self.do_combine(g1, g2, rot, smth)

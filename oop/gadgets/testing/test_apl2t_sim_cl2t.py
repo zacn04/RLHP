@@ -9,18 +9,18 @@ def test_apl2t_sim_cl2t():
     apl2t1 = AntiParallelLocking2Toggle()
     net += apl2t1
     
-    apl2t2 = AntiParallelLocking2Toggle() 
+    apl2t2 = AntiParallelLocking2Toggle()
     net += apl2t2
     
+    # Use do_combine and add the result to the network
+    combined = net.do_combine(0, 1, rotation=2, splicing_index=3)
+    net += combined  # Add the combined gadget to the network
     
-    combined = net.combine(0, 1, rotation=2, splicing_index=3)
-    
-    
-    net.connect(combined, 1, 6)  
-    net.connect(combined, 2, 5)
+    # Connect using the index of the combined gadget (which is 2)
+    net.connect(2, 1, 6)
+    net.connect(2, 2, 5)
     
     res = net.simplify()
-
     print(res)
     
     net2 = GadgetNetwork()
@@ -28,3 +28,5 @@ def test_apl2t_sim_cl2t():
     res2 = net2.simplify()
     
     assert(res == res2)
+
+test_apl2t_sim_cl2t()

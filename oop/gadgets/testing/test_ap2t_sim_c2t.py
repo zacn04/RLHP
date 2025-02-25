@@ -4,37 +4,33 @@ from oop.gadgets.gadgetlike import GadgetNetwork
 
 def test_ap2t_sim_c2t():
     net = GadgetNetwork()
-
+    
     # Add the first AP2T
     ap2t1 = AntiParallel2Toggle()
     net += ap2t1
-
+    
     ap2t2 = AntiParallel2Toggle()
     ap2t2.setCurrentState(1)
     net += ap2t2
-
+    
     print(net)
-
-    combined = net.combine(0, 1, rotation=0, splicing_index=3)
-
+    
+    # Use do_combine instead of combine to get the actual gadget
+    combined = net.do_combine(0, 1, rotation=0, splicing_index=3)
+    net += combined  # Add the combined gadget to the network
+    
     print(combined, type(combined))
-
-
-    net.connect(combined, 0, 4)  
-    net.connect(combined, 2, 6)  
-
+    
+    # Now connect using the index of the combined gadget (which is 2)
+    net.connect(2, 0, 4)
+    net.connect(2, 2, 6)
+    
     res = net.simplify()
-
-
+    
     net2 = GadgetNetwork()
-
     net2 += Crossing2Toggle()
-
-
     res2 = net2.simplify()
-
-
+    
     assert(res == res2)
-
 
 test_ap2t_sim_c2t()
