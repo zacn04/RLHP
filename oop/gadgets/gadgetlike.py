@@ -306,70 +306,59 @@ class GadgetNetwork(GadgetLike):
         gadget.locations = [loc for loc in gadget.locations if loc != loc1 and loc != loc2]
 
     def do_combine(self, gadget1_index, gadget2_index, rotation, splicing_index=-1):
-        """Combine two gadgets into a new one with potentially rotated locations."""
         gadget1 = self.subgadgets[gadget1_index]
         gadget2 = self.subgadgets[gadget2_index]
+
+        modulo_index = len(gadget2.locations)
+        rotated_locations = [((location + rotation) % modulo_index + splicing_index+1) for location in gadget2.locations]
+        rotated_transitions = {
+            i: [((l1 + rotation) % modulo_index + splicing_index+1, (l2 + rotation) % modulo_index + splicing_index+1, n) for l1, l2, n in d_i]
+            for i, d_i in gadget2.transitions.items()
+        }
+
+        #renames the locations
+        rotated_gadget2 = Gadget(
+            name=f"{rotation}-Rotated {gadget2.name}",
+            locations=rotated_locations,
+            states=gadget2.states, #assuming the rotations have no bearings of states
+            transitions=rotated_transitions,
+            current_state=gadget2.current_state
+            )
         
-        # Find the highest location number across all gadgets to avoid conflicts
-        max_existing_loc = max(
-            max(g.locations) if g.locations else 0 
-            for g in self.subgadgets
-        )
-        offset = max_existing_loc + 1
+
+        new_locations = gadget1.locations[:splicing_index+1] + rotated_gadget2.locations + [location+modulo_index for location in gadget1.locations[splicing_index+1:]]
+
+        #after this, we have both transitions, separate. need to combine and not lose any lol
+        new_states = [(s1, s2) for s1 in gadget1.states for s2 in rotated_gadget2.states]
         
-        # Map original locations in gadget2 to new rotated locations
-        old_to_new_locs = {}
-        g2_locs = gadget2.getLocations()
-        
-        for i, loc in enumerate(g2_locs):
-            new_loc = ((i + rotation) % len(g2_locs)) + offset
-            old_to_new_locs[loc] = new_loc
-        
-        # Get rotated locations for gadget2
-        rotated_locations = [old_to_new_locs[loc] for loc in g2_locs]
-        
-        # Rotate transitions in gadget2
-        rotated_transitions = {}
-        for state, transitions_list in gadget2.transitions.items():
-            rotated_transitions[state] = []
-            for loc1, loc2, next_state in transitions_list:
-                new_loc1 = old_to_new_locs[loc1]
-                new_loc2 = old_to_new_locs[loc2]
-                rotated_transitions[state].append((new_loc1, new_loc2, next_state))
-        
-        # Combine locations
-        new_locations = (
-            gadget1.locations[:splicing_index+1] + 
-            rotated_locations + 
-            gadget1.locations[splicing_index+1:]
-        )
-        
-        # Create compound states (product construction)
-        new_states = [(s1, s2) for s1 in gadget1.states for s2 in gadget2.states]
+        gadget1transitions = {
+            i: [(loc1 + modulo_index if loc1 > splicing_index else loc1, 
+                loc2 + modulo_index if loc2 > splicing_index else loc2, 
+                next_state) 
+                for loc1, loc2, next_state in d_i] 
+            for i, d_i in gadget1.transitions.items()
+        }
         new_transitions = {}
-        
+
+        # TODO: need to generalise for arbitrary combinations. (i.e. d>2)
         for (s1, s2) in new_states:
             new_transitions[(s1, s2)] = []
-            
-            # Add transitions from gadget1 (stay in same gadget2 state)
-            for loc1, loc2, next_state in gadget1.transitions.get(s1, []):
-                new_transitions[(s1, s2)].append((loc1, loc2, (next_state, s2)))
-            
-            # Add transitions from gadget2 (stay in same gadget1 state)
-            for loc1, loc2, next_state in rotated_transitions.get(s2, []):
-                new_transitions[(s1, s2)].append((loc1, loc2, (s1, next_state)))
+            for locA, locB, next_state in gadget1transitions[s1]:
+                new_transitions[(s1, s2)].append((locA, locB, (next_state, s2)))
+            print(rotated_transitions[s2])
+            for locA, locB, next_state in rotated_transitions[s2]:
+                new_transitions[(s1, s2)].append((locA, locB, (s1, next_state)))
+
         
-        # Remove duplicate locations
-        new_locations = list(dict.fromkeys(new_locations))
-        
-        # Create and return the combined gadget
-        return Gadget(
-            name=f"Combined({gadget1.name}+{gadget2.name})",
-            locations=new_locations,
-            states=new_states,
-            transitions=new_transitions,
-            current_state=(gadget1.current_state, gadget2.current_state)
+        new_gadget = Gadget(
+        name=f"Combined({gadget1.name}+{gadget2.name})",
+        locations=new_locations,
+        states=new_states,
+        transitions=new_transitions,
+        current_state=(gadget1.current_state, gadget2.current_state)
         )
+
+        return new_gadget
 
     def simplify(self):
         """
@@ -405,3 +394,4 @@ class GadgetNetwork(GadgetLike):
             combined.states.remove(k) 
         
         return combined
+    

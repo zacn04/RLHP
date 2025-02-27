@@ -332,3 +332,5 @@ def run_all_strategies(initial_gadgets, target, name="Test"):
                               strategy=SearchStrategy.RANDOM, verbose=True)
     
     return dfs_ops, bfs_ops, random_ops
+
+run_all_strategies()

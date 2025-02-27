@@ -2,7 +2,7 @@
 Author: Zac Nwogwugwu, 2025
 This defines our toolkit for gadgets with the new transition (triples) format.
 '''
-from oop.gadgets.gadgetlike import Gadget
+from oop.gadgets.gadgetlike import Gadget, GadgetNetwork
 
 # LOCATIONS MUST BE CLOCKWISE!
 class ParallelLocking2Toggle(Gadget):
@@ -128,3 +128,5 @@ class CrossingLocking2Toggle(Gadget):
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
+
+
