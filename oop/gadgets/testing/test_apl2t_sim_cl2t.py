@@ -1,3 +1,10 @@
+import sys
+import os
+from pathlib import Path
+
+# Get the project root directory (RLHP)
+project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels
+sys.path.append(str(project_root))
 from oop.gadgets.gadgetdefs import *
 from oop.gadgets.gadgetlike import GadgetNetwork
 
