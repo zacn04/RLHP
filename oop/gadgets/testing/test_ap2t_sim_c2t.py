@@ -27,7 +27,7 @@ def test_ap2t_sim_c2t():
     print(net)
     
     # Step 1: Combine the gadgets directly
-    combined = net.do_combine(0, 1, rotation=0, splicing_index=1)
+    combined = net.do_combine(0, 1, rotation=0, splicing_index=1, reflect=False)
     
     print(f"Combined gadget created: {combined.name}")
     
@@ -46,7 +46,7 @@ def test_ap2t_sim_c2t():
     print("\nFinal gadget locations:", simplified.getLocations())
     
     # Create a target Crossing2Toggle
-    target = AntiParallel2Toggle()
+    target = Crossing2Toggle()
     
     # Compare the simplified gadget with the target
     print("\nComparison with target:")

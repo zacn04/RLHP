@@ -43,8 +43,8 @@ def print_gadget_definition(gadget: Gadget) -> str:
 def format_operation(op: Tuple) -> str:
     """Format an operation into a human-readable string."""
     if op[0] == "COMBINE":
-        _, g1_idx, g2_idx, rotation, splice_idx = op
-        return f"Combine gadget {g1_idx} with gadget {g2_idx} (rotation: {rotation}, splice at: {splice_idx})"
+        _, g1_idx, g2_idx, rotation, splice_idx, reflect = op
+        return f"Combine gadget {g1_idx} with gadget {g2_idx} (rotation: {rotation}, splice at: {splice_idx}, reflect = {reflect})"
     else:  # CONNECT
         _, gadget_idx, loc1, loc2 = op
         return f"Connect locations {loc1} and {loc2} in gadget {gadget_idx}"
@@ -59,7 +59,8 @@ def get_possible_operations(network: GadgetNetwork) -> List[Tuple]:
             for j, g2 in enumerate(network.subgadgets[i+1:], i+1):
                 for rotation in range(len(g2.getLocations())):
                     for splice_idx in range(len(g1.getLocations())):
-                        operations.append(("COMBINE", i, j, rotation, splice_idx))
+                        # operations.append(("COMBINE", i, j, rotation, splice_idx, True))
+                        operations.append(("COMBINE", i, j, rotation, splice_idx, False))
     
     # CONNECT operations - for each individual gadget
     for i, gadget in enumerate(network.subgadgets):
@@ -67,14 +68,22 @@ def get_possible_operations(network: GadgetNetwork) -> List[Tuple]:
         if len(locs) >= 2:  # Need at least 2 locations to connect
             n = len(locs)
             
-            # Create pairs of adjacent locations using the gadget's existing order
-            # which should already represent the clockwise arrangement
-            for j in range(n):
-                loc1 = locs[j]
-                loc2 = locs[(j + 1) % n]  # Wrap around to the first location
-                operations.append(("CONNECT", i, loc1, loc2))
-                # Also allow the reverse direction
-                operations.append(("CONNECT", i, loc2, loc1))
+            # ALL PAIRS: NON PLANAR
+            for j in range(n-1):
+                for k in range(i,n):
+                    loc1 = locs[j]
+                    loc2 = locs[k]
+                    operations.append(("CONNECT", i, loc1, loc2))
+                    # Also allow the reverse direction
+            
+
+            # PLANAR
+            # for j in range(n):
+            #     loc1 = locs[j]
+            #     loc2 = locs[(j+1)%n]
+            #     operations.append(("CONNECT", i, loc1, loc2))
+            #         # Also allow the reverse direction
+            #     operations.append(("CONNECT", i, loc2, loc1))
     
     return operations
 
@@ -109,15 +118,14 @@ def apply_operation(network: GadgetNetwork, operation: Tuple) -> Optional[Gadget
     
     try:
         if operation[0] == "COMBINE":
-            _, g1_idx, g2_idx, rotation, splice_idx = operation
+            _, g1_idx, g2_idx, rotation, splice_idx, reflect = operation
             
             # Validate indices
             if g1_idx >= len(new_network.subgadgets) or g2_idx >= len(new_network.subgadgets):
                 return None
             
             # Perform the combination
-            combined = new_network.do_combine(g1_idx, g2_idx, rotation, splice_idx)
-            
+            combined = new_network.do_combine(g1_idx, g2_idx, rotation, splice_idx, reflect)
             # Update the network's gadgets list
             # Remove the original gadgets (in reverse order to avoid index shifting)
             if g2_idx > g1_idx:
@@ -239,10 +247,10 @@ def demonstrate_solution(initial_gadgets: List[Gadget],
             print(f"\nStep {i}: {format_operation(op)}")
             
             if op[0] == "COMBINE":
-                _, g1_idx, g2_idx, rotation, splice_idx = op
+                _, g1_idx, g2_idx, rotation, splice_idx, reflect = op
                 
                 # Show pre-combine state
-                print(f"  Combining gadget {g1_idx} with gadget {g2_idx}")
+                print(f"  Combining gadget {g1_idx} with gadget {g2_idx}, reflect = {reflect}")
                 print(f"  Gadget {g1_idx} locations: {network.subgadgets[g1_idx].getLocations()}")
                 print(f"  Gadget {g2_idx} locations: {network.subgadgets[g2_idx].getLocations()}")
                 
@@ -551,12 +559,12 @@ def print_reachable_states(gadget: Gadget, verbose: bool = True) -> str:
 
 """Run a search to find how two AntiParallel2Toggle gadgets can simulate a CrossingLocking2Toggle."""
     # Create instances of the gadgets
-ap2t1 = AntiParallel2Toggle()  # First instance
-ap2t2 = AntiParallel2Toggle()  # Second instance
+start1 = AntiParallel2Toggle()  # First instance
+start2 = AntiParallel2Toggle()  # Second instance
 target = Crossing2Toggle()
     
 print("Searching for solution to create CrossingLocking2Toggle from two AntiParallel2Toggles...")
-operations = find_simulation([ap2t1, ap2t2], target, 
+operations = find_simulation([start1, start2], target, 
                               strategy=SearchStrategy.BFS,
                               max_depth=6, 
                               verbose=True)
@@ -568,6 +576,3 @@ if operations:
     print("Operations:", [format_operation(op) for op in operations])
 else:
     print("No solution found.")
-
-
-

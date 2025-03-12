@@ -384,69 +384,69 @@ class GadgetNetwork(GadgetLike):
         if loc1 not in gadget.locations or loc2 not in gadget.locations:
             raise ValueError(f"One or both locations not in {gadget.name}")
 
-        # # Group transitions by their start and end locations
-        # inbound1 = {}  # Transitions ending at loc1
-        # outbound1 = {}  # Transitions starting at loc1
-        # inbound2 = {}  # Transitions ending at loc2
-        # outbound2 = {}  # Transitions starting at loc2
+        # Group transitions by their start and end locations
+        inbound1 = {}  # Transitions ending at loc1
+        outbound1 = {}  # Transitions starting at loc1
+        inbound2 = {}  # Transitions ending at loc2
+        outbound2 = {}  # Transitions starting at loc2
         
-        # # New transitions that will replace the old ones
+        # New transitions that will replace the old ones
         new_transitions = {}
         
-        # # Initialize new transitions with transitions that don't involve loc1 or loc2
-        # for state, transitions_list in gadget.transitions.items():
-        #     new_transitions[state] = []
-            
-        #     for loc_in, loc_out, next_state in transitions_list:
-        #         # Keep transitions that don't involve the locations we're connecting
-        #         if loc_in != loc1 and loc_in != loc2 and loc_out != loc1 and loc_out != loc2:
-        #             new_transitions[state].append((loc_in, loc_out, next_state))
-                
-        #         # Categorize transitions involving loc1 and loc2
-        #         if loc_in == loc1 and loc_out != loc2:
-        #             outbound1.setdefault(state, []).append((loc_out, next_state))
-        #         elif loc_in == loc2 and loc_out != loc1:
-        #             outbound2.setdefault(state, []).append((loc_out, next_state))
-        #         elif loc_out == loc1 and loc_in != loc2:
-        #             inbound1.setdefault(next_state, []).append((loc_in, state))
-        #         elif loc_out == loc2 and loc_in != loc1:
-        #             inbound2.setdefault(next_state, []).append((loc_in, state))
-        
-        # # Create new transitions through the connection
-        # for state in gadget.states:
-        #     # Transitions: in -> loc1 -> loc2 -> out
-        #     for (loc_in, in_state) in inbound1.get(state, []):
-        #         for (loc_out, next_state) in outbound2.get(state, []):
-        #             new_transitions[in_state].append((loc_in, loc_out, next_state))
-            
-        #     # Transitions: in -> loc2 -> loc1 -> out
-        #     for (loc_in, in_state) in inbound2.get(state, []):
-        #         for (loc_out, next_state) in outbound1.get(state, []):
-        #             new_transitions[in_state].append((loc_in, loc_out, next_state))
-
         # Initialize new transitions with transitions that don't involve loc1 or loc2
         for state, transitions_list in gadget.transitions.items():
             new_transitions[state] = []
             
             for loc_in, loc_out, next_state in transitions_list:
                 # Keep transitions that don't involve the locations we're connecting
-                if loc_in != loc2 and loc_out != loc2:
+                if loc_in != loc1 and loc_in != loc2 and loc_out != loc1 and loc_out != loc2:
                     new_transitions[state].append((loc_in, loc_out, next_state))
                 
                 # Categorize transitions involving loc1 and loc2
-                elif loc_in == loc2:
-                    new_transitions[state].append((loc1, loc_out, next_state))
-                elif loc_out == loc2 and loc_in != loc2:
-                    new_transitions[state].append((loc_in, loc1, next_state))
+                if loc_in == loc1 and loc_out != loc2:
+                    outbound1.setdefault(state, []).append((loc_out, next_state))
+                elif loc_in == loc2 and loc_out != loc1:
+                    outbound2.setdefault(state, []).append((loc_out, next_state))
+                elif loc_out == loc1 and loc_in != loc2:
+                    inbound1.setdefault(next_state, []).append((loc_in, state))
+                elif loc_out == loc2 and loc_in != loc1:
+                    inbound2.setdefault(next_state, []).append((loc_in, state))
+        
+        # Create new transitions through the connection
+        for state in gadget.states:
+            # Transitions: in -> loc1 -> loc2 -> out
+            for (loc_in, in_state) in inbound1.get(state, []):
+                for (loc_out, next_state) in outbound2.get(state, []):
+                    new_transitions[in_state].append((loc_in, loc_out, next_state))
+            
+            # Transitions: in -> loc2 -> loc1 -> out
+            for (loc_in, in_state) in inbound2.get(state, []):
+                for (loc_out, next_state) in outbound1.get(state, []):
+                    new_transitions[in_state].append((loc_in, loc_out, next_state))
+
+        # # Initialize new transitions with transitions that don't involve loc1 or loc2
+        # for state, transitions_list in gadget.transitions.items():
+        #     new_transitions[state] = []
+            
+        #     for loc_in, loc_out, next_state in transitions_list:
+        #         # Keep transitions that don't involve the locations we're connecting
+        #         if loc_in != loc2 and loc_out != loc2:
+        #             new_transitions[state].append((loc_in, loc_out, next_state))
+                
+        #         # Categorize transitions involving loc1 and loc2
+        #         elif loc_in == loc2:
+        #             new_transitions[state].append((loc1, loc_out, next_state))
+        #         elif loc_out == loc2 and loc_in != loc2:
+        #             new_transitions[state].append((loc_in, loc1, next_state))
                 
         
         # Update the gadget
         gadget.transitions = new_transitions
-        gadget.locations = [loc for loc in gadget.locations if loc != loc2]
+        gadget.locations = [loc for loc in gadget.locations if loc != loc2 and loc != loc1]
 
         gadget=gadget.simplify_gadget()
 
-    def do_combine(self, gadget1_index, gadget2_index, rotation, splicing_index=-1):
+    def do_combine(self, gadget1_index, gadget2_index, rotation, reflect = False, splicing_index=-1):
         """
         Combine two gadgets into a single gadget.
         
@@ -550,7 +550,11 @@ class GadgetNetwork(GadgetLike):
         # Update new_transitions and new_states
         new_transitions = filtered_transitions
         new_states = non_empty_states
-        new_locations.sort()
+
+        
+        new_locations.sort(reverse=reflect)
+
+
         # Create the new combined gadget with only non-empty states
         new_gadget = Gadget(
             name=f"Combined({gadget1.name}+{gadget2.name})",
@@ -597,7 +601,7 @@ class GadgetNetwork(GadgetLike):
                     print(f"  Gadget locations after: {gadget.locations}")
                     
                 elif op[0] == "COMBINE":
-                    _, g1_idx, g2_idx, rotation, splice_idx = op
+                    _, g1_idx, g2_idx, rotation, splice_idx, reflect = op
                     
                     # Validate indices
                     if g1_idx >= len(working_gadgets) or g2_idx >= len(working_gadgets):
@@ -613,7 +617,7 @@ class GadgetNetwork(GadgetLike):
                     print(f"  Gadget2 locations: {gadget2.locations}")
                     
                     # Create the combined gadget
-                    result = self.do_combine(g1_idx, g2_idx, rotation, splice_idx)
+                    result = self.do_combine(g1_idx, g2_idx, rotation, splice_idx, reflect)
                     
                     # Update the working gadgets list
                     # Remove gadgets in reverse order to avoid index shifting
