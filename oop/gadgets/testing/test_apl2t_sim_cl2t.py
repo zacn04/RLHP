@@ -1,3 +1,10 @@
+import sys
+import os
+from pathlib import Path
+
+# Get the project root directory (RLHP)
+project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels
+sys.path.append(str(project_root))
 from oop.gadgets.gadgetdefs import *
 from oop.gadgets.gadgetlike import GadgetNetwork
 
@@ -13,7 +20,7 @@ def test_apl2t_sim_cl2t():
     net += apl2t2
     
     # Use do_combine and add the result to the network
-    combined = net.do_combine(0, 1, rotation=2, splicing_index=3)
+    combined = net.do_combine(0, 1, rotation=2, splicing_index=3, reflect=False)
     net += combined  # Add the combined gadget to the network
     
     # Connect using the index of the combined gadget (which is 2)
