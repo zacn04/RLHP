@@ -75,25 +75,26 @@ class GadgetSimulationEnv(Env):
         """Calculate reward based on current state and partial progress"""
         reward = 0.0
         
-        # Base reward for taking any valid action
-        reward += 0.1  # Small positive reward for any valid action
+        # No base reward for valid actions - only reward progress
+        # reward += 0.1  # Removed base reward
         
-        # Penalty for each gadget used beyond initial count
+        # Stronger penalty for extra gadgets
         extra_gadgets = len(self.network.subgadgets) - len(self.initial_gadgets)
-        reward -= 2.0 * extra_gadgets  # Reduced penalty
+        reward -= 5.0 * extra_gadgets  # Increased penalty
         
         # Check if we've found the target gadget
         simplified = self.network.simplify()
         
-        # Calculate DFA similarity score regardless of gadget count
+        # Calculate DFA similarity score with stricter matching
         similarity_score = self._calculate_similarity(simplified, self.target_gadget)
         
-        # Give similarity reward scaled by how close we are to target
-        reward += similarity_score * 3.0  # Reduced weight of similarity
-        
+        # Only give similarity reward if we're making progress
+        if similarity_score > 0.8:  # Only reward high similarity
+            reward += similarity_score * 2.0  # Reduced weight of similarity
+            
         # Additional reward for reducing number of gadgets
         if len(self.network.subgadgets) < len(self.initial_gadgets):
-            reward += 1.0  # Reduced reward for combining gadgets
+            reward += 2.0  # Increased reward for combining gadgets
             
         # Large reward for finding exact solution
         if simplified == self.target_gadget and len(self.network.subgadgets) == 1:
@@ -102,8 +103,8 @@ class GadgetSimulationEnv(Env):
                 self.successful_operations = self.operation_history.copy()
                 reward = 100.0  # Much higher reward for solution
         
-        # Cap negative rewards at -10
-        reward = max(-10.0, reward)
+        # Cap negative rewards at -20 (more negative to discourage bad behavior)
+        reward = max(-20.0, reward)
         
         return reward
     
@@ -111,22 +112,29 @@ class GadgetSimulationEnv(Env):
         """Calculate similarity between two gadgets based on their DFA properties"""
         score = 0.0
         
-        # Compare number of states
+        # Compare number of states - must be exact match
         states1 = len(gadget1.getStates())
         states2 = len(gadget2.getStates())
-        score += 1.0 - abs(states1 - states2) / max(states1, states2)
-        
-        # Compare transitions
+        if states1 == states2:
+            score += 0.4  # Only reward exact match
+        else:
+            return 0.0  # Return 0 if states don't match
+            
+        # Compare transitions - must be exact match
         trans1 = gadget1.getTransitions()
         trans2 = gadget2.getTransitions()
-        common_trans = set(trans1) & set(trans2)
-        score += len(common_trans) / max(len(trans1), len(trans2))
-        
-        # Compare current states
-        if gadget1.getCurrentState() == gadget2.getCurrentState():
-            score += 0.5
+        if set(trans1) == set(trans2):
+            score += 0.4  # Only reward exact match
+        else:
+            return 0.0  # Return 0 if transitions don't match
             
-        return score / 2.5  # Normalize to [0,1]
+        # Compare current states - must be exact match
+        if gadget1.getCurrentState() == gadget2.getCurrentState():
+            score += 0.2  # Only reward exact match
+        else:
+            return 0.0  # Return 0 if current states don't match
+            
+        return score  # No normalization needed since we only reward exact matches
     
     def reset(self, seed=None, options=None):
         """Reset environment to initial state"""
