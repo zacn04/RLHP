@@ -87,8 +87,8 @@ class Gadget(GadgetLike):
     
     def __eq__(self, other):
         """
-        Compare gadgets for behavioral equivalence using list-based Hopcroft minimization
-        followed by isomorphism testing.
+        Compare gadgets for behavioral equivalence using DFA minimization.
+        Two gadgets are equivalent if their minimized DFAs are identical.
         """
         # Quick rejection tests
         states1 = self.getStates()
@@ -103,11 +103,11 @@ class Gadget(GadgetLike):
             return False
         
         try:
-            # Get reachable parts of both gadgets (important for combined gadgets)
+            # Get reachable parts of both gadgets
             reachable_self = self._get_reachable_gadget()
             reachable_other = other._get_reachable_gadget()
             
-            # Prepare DFAs for minimization (no need to convert to dict format)
+            # Prepare DFAs for minimization
             dfa1 = (
                 reachable_self.getStates(), 
                 reachable_self.getLocations(), 
@@ -124,16 +124,12 @@ class Gadget(GadgetLike):
                 reachable_other.getStates()[1:] if len(reachable_other.getStates()) > 1 else []
             )
             
-            # Use your list-based Hopcroft minimization
+            # Minimize both DFAs
             min_dfa1 = hp.list_hopcroft_minimisation(*dfa1)
             min_dfa2 = hp.list_hopcroft_minimisation(*dfa2)
             
-            # Normalize location numbering for comparison
-            norm_dfa1 = hp.list_normalisation(min_dfa1)
-            norm_dfa2 = hp.list_normalisation(min_dfa2)
-            
-            # Check isomorphism between the minimized DFAs
-            return self._are_dfas_isomorphic(norm_dfa1, norm_dfa2)
+            # Compare the minimized DFAs directly
+            return min_dfa1 == min_dfa2
             
         except Exception as e:
             print(f"Error in gadget comparison: {str(e)}")
@@ -174,7 +170,7 @@ class Gadget(GadgetLike):
     def _are_dfas_isomorphic(self, dfa1, dfa2):
         """
         Check if two minimized DFAs are isomorphic, accounting for
-        different location numbering.
+        different location numbering but preserving topological relationships.
         """
         (states1, locs1, trans1, start1, accept1) = dfa1
         (states2, locs2, trans2, start2, accept2) = dfa2
@@ -189,6 +185,10 @@ class Gadget(GadgetLike):
         if set(accept1) != set(accept2):
             return False
         
+        # Create adjacency matrices for both DFAs
+        adj1 = self._create_adjacency_matrix(locs1, trans1)
+        adj2 = self._create_adjacency_matrix(locs2, trans2)
+        
         # Try all possible mappings of locations
         import itertools
         
@@ -196,11 +196,37 @@ class Gadget(GadgetLike):
             # Create location mapping
             loc_map = {locs1[i]: loc_perm[i] for i in range(len(locs1))}
             
-            # Check if this mapping makes the transitions equivalent
-            if self._check_transition_equivalence(states1, trans1, trans2, loc_map):
-                return True
+            # Check if this mapping preserves the adjacency relationships
+            if self._check_adjacency_equivalence(adj1, adj2, loc_map):
+                # If adjacency is preserved, then check transition equivalence
+                if self._check_transition_equivalence(states1, trans1, trans2, loc_map):
+                    return True
                 
         return False
+
+    def _create_adjacency_matrix(self, locations, transitions):
+        """Create an adjacency matrix representing the connectivity between locations."""
+        n = len(locations)
+        adj = [[False] * n for _ in range(n)]
+        
+        for state_transitions in transitions.values():
+            for loc1, loc2, _ in state_transitions:
+                i = locations.index(loc1)
+                j = locations.index(loc2)
+                adj[i][j] = True
+                
+        return adj
+
+    def _check_adjacency_equivalence(self, adj1, adj2, loc_map):
+        """Check if two adjacency matrices are equivalent under the given location mapping."""
+        n = len(adj1)
+        for i in range(n):
+            for j in range(n):
+                mapped_i = loc_map[i]
+                mapped_j = loc_map[j]
+                if adj1[i][j] != adj2[mapped_i][mapped_j]:
+                    return False
+        return True
 
     def _check_transition_equivalence(self, states, trans1, trans2, loc_map):
         """Check if transitions are equivalent under the given location mapping."""
