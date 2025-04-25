@@ -333,4 +333,4 @@ def run_all_strategies(initial_gadgets, target, name="Test"):
     
     return dfs_ops, bfs_ops, random_ops
 
-run_all_strategies()
+run_all_strategies(initial_gadgets=[Crossing2Toggle(), Crossing2Toggle()], target=Toggle2())

@@ -340,12 +340,11 @@ class GadgetNetwork(GadgetLike):
         }
         new_transitions = {}
 
-        # TODO: need to generalise for arbitrary combinations. (i.e. d>2)
+        
         for (s1, s2) in new_states:
             new_transitions[(s1, s2)] = []
             for locA, locB, next_state in gadget1transitions[s1]:
                 new_transitions[(s1, s2)].append((locA, locB, (next_state, s2)))
-            print(rotated_transitions[s2])
             for locA, locB, next_state in rotated_transitions[s2]:
                 new_transitions[(s1, s2)].append((locA, locB, (s1, next_state)))
 
