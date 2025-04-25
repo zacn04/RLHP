@@ -4,8 +4,6 @@ dfa/hopcroft.py
 gadgets/__init__.py
 gadgets/gadgetdefs.py
 gadgets/gadgetlike.py
-objective/__init__.py
-objective/simulation.py
 oop.egg-info/PKG-INFO
 oop.egg-info/SOURCES.txt
 oop.egg-info/dependency_links.txt

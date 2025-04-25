@@ -1,4 +1,3 @@
 dfa
 gadgets
-objective
 synthetic

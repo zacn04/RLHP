@@ -23,10 +23,10 @@ def print_gadget_definition(gadget: Gadget) -> str:
     
     for state in sorted(gadget.transitions.keys()):
         output.append(f"  State {state}:")
-        sorted_transitions = sorted(gadget.transitions[state].items(), 
-                                 key=lambda x: (x[0][0], x[0][1]))
-        for (from_loc, to_loc), next_state in sorted_transitions:
-            output.append(f"    ({from_loc} → {to_loc}) ⟹ State {next_state}")
+        sorted_transitions = sorted(gadget.transitions[state], 
+                                 key=lambda x: (x[0], x[1]))
+        for loc1, loc2, next_state in sorted_transitions:
+            output.append(f"    ({loc1} → {loc2}) ⟹ State {next_state}")
     
     return "\n".join(output)
 
@@ -87,15 +87,11 @@ def apply_operation(network: GadgetNetwork, operation: Tuple) -> Optional[Gadget
             g1 = new_network.subgadgets[g1_idx]
             g2 = new_network.subgadgets[g2_idx]
             if has_duplicate_locations(g1) or has_duplicate_locations(g2):
-                print(f"Input gadgets have duplicates before {operation}")
-                print(f"G1 locs: {g1.getLocations()}")
-                print(f"G2 locs: {g2.getLocations()}")
                 return None
                 
             combined = network.do_combine(g1_idx, g2_idx, rotation, splice_idx)
             error_msg = validate_gadget(combined, operation)
             if error_msg:
-                print(error_msg)
                 return None
                 
             new_network.subgadgets = [g for i, g in enumerate(new_network.subgadgets) 
@@ -111,19 +107,15 @@ def apply_operation(network: GadgetNetwork, operation: Tuple) -> Optional[Gadget
                 return None
                 
             if has_duplicate_locations(gadget):
-                print(f"Input gadget has duplicates before {operation}")
-                print(f"Locations: {gadget.getLocations()}")
                 return None
                 
             network.do_connect(gadget, loc1, loc2)
             error_msg = validate_gadget(gadget, operation)
             if error_msg:
-                print(error_msg)
                 return None
             
         return new_network
     except (ValueError, IndexError) as e:
-        print(f"Error applying {operation}: {str(e)}")
         return None
 
 def network_state_hash(network: GadgetNetwork) -> str:
@@ -135,9 +127,9 @@ def network_state_hash(network: GadgetNetwork) -> str:
             'state': gadget.getCurrentState(),
             'locations': sorted(gadget.getLocations()),
             'transitions': sorted(
-                (loc1, loc2) 
-                for state in gadget.transitions.values() 
-                for (loc1, loc2) in state.keys()
+                (loc1, loc2, next_state) 
+                for state, transitions in gadget.transitions.items() 
+                for loc1, loc2, next_state in transitions
             )
         }
         state_info.append(gadget_info)
@@ -307,30 +299,17 @@ def find_simulation(initial_gadgets: List[Gadget],
         print("\nNo solution found after trying all initial states")
     return None
 
-# Example usage:
-
-from oop.gadgets.gadgetdefs import (
-    AntiParallel2Toggle, Crossing2Toggle,
-    AntiParallelLocking2Toggle, CrossingLocking2Toggle,
-    Toggle2, ParallelLocking2Toggle,
-    Door, SelfClosingDoor
-)
-
 def run_all_strategies(initial_gadgets, target, name="Test"):
-    print(f"\n=== {name} ===")
-    
-    print("\nDFS:")
-    dfs_ops = find_simulation(initial_gadgets, target, 
-                            strategy=SearchStrategy.DFS, verbose=True)
-    
-    print("\nBFS:")
-    bfs_ops = find_simulation(initial_gadgets, target, 
-                            strategy=SearchStrategy.BFS, verbose=True)
-    
-    print("\nRandom:")
-    random_ops = find_simulation(initial_gadgets, target, 
-                              strategy=SearchStrategy.RANDOM, verbose=True)
-    
-    return dfs_ops, bfs_ops, random_ops
-
-run_all_strategies()
+    """Run search with all available strategies."""
+    results = {}
+    for strategy in SearchStrategy:
+        print(f"\nTrying {strategy.value}...")
+        path = find_simulation(initial_gadgets, target, strategy=strategy)
+        results[strategy] = path is not None
+        if path:
+            print(f"Found solution with {strategy.value}:")
+            for op in path:
+                print(f"  {format_operation(op)}")
+        else:
+            print(f"No solution found with {strategy.value}")
+    return results

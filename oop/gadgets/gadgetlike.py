@@ -60,10 +60,17 @@ class Gadget(GadgetLike):
         return False
 
     def getCurrentState(self):
-        return self.current_state
+        """Get the current state of the gadget, ensuring it's always an integer"""
+        if isinstance(self.current_state, tuple):
+            return self.current_state[0]
+        return int(self.current_state)
     
     def setCurrentState(self, state):
+        """Set the current state of the gadget, ensuring it's always an integer"""
         states = self.getStates()
+        if isinstance(state, tuple):
+            state = state[0]
+        state = int(state)
         if state in states:
             self.current_state = state
         else:
@@ -345,7 +352,6 @@ class GadgetNetwork(GadgetLike):
             new_transitions[(s1, s2)] = []
             for locA, locB, next_state in gadget1transitions[s1]:
                 new_transitions[(s1, s2)].append((locA, locB, (next_state, s2)))
-            print(rotated_transitions[s2])
             for locA, locB, next_state in rotated_transitions[s2]:
                 new_transitions[(s1, s2)].append((locA, locB, (s1, next_state)))
 
