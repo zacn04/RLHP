@@ -51,11 +51,23 @@ def get_possible_operations(network: GadgetNetwork) -> List[Tuple]:
                     for splice_idx in range(len(g1.getLocations())):
                         operations.append(("COMBINE", i, j, rotation, splice_idx))
     
-    # CONNECT operations
+    # CONNECT operations with planarity check
     for i, gadget in enumerate(network.subgadgets):
         locs = gadget.getLocations()
-        for loc1, loc2 in permutations(locs, 2):
-            operations.append(("CONNECT", i, loc1, loc2))
+        # Sort locations to ensure consistent ordering
+        locs = sorted(locs)
+        
+        # For each location, only allow connections to adjacent locations
+        # This ensures planarity by preventing crossing connections
+        for j in range(len(locs)):
+            # Connect to next location (circular)
+            next_loc = locs[(j + 1) % len(locs)]
+            operations.append(("CONNECT", i, locs[j], next_loc))
+            
+            # Connect to location after next (if it exists)
+            if len(locs) > 2:
+                next_next_loc = locs[(j + 2) % len(locs)]
+                operations.append(("CONNECT", i, locs[j], next_next_loc))
     
     return operations
 
