@@ -16,13 +16,13 @@ def test_ap2t_sim_c2t():
     print(net)
     
     # Use do_combine instead of combine to get the actual gadget
-    combined = net.do_combine(0, 1, rotation=0, splicing_index=3)
+    combined = net.do_combine(0, 1, rotation=0, splicing_index=1)
     net += combined  # Add the combined gadget to the network
     
     print(combined, type(combined))
     
     # Now connect using the index of the combined gadget (which is 2)
-    net.connect(2, 0, 4)
+    net.connect(2, 1, 5)
     net.connect(2, 2, 6)
     
     res = net.simplify()
