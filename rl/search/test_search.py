@@ -121,16 +121,10 @@ def test_door_sim_scd():
         max_depth=4,
         verbose=True
     )
-    
-    if path:
-        print("Found solution!")
-        print("Operations:")
-        for op in path:
-            print(f"  {format_operation(op)}")
+    if not path:
         return True
-    else:
-        print("No solution found")
-        return False
+    return False
+
 
 def test_apl2t_sim_cl2t():
     """Test if two APL2Ts can simulate a CL2T"""

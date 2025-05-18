@@ -1,25 +1,19 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.callbacks import EvalCallback
-from stable_baselines3.common.policies import MultiInputActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Import your gadget classes and env
 from oop.gadgets.gadgetdefs import (
-    AntiParallel2Toggle,
-    Crossing2Toggle,
-    Toggle2,
-    AntiParallelLocking2Toggle,
-    CrossingLocking2Toggle,
-    ParallelLocking2Toggle,
-    Door,
-    SelfClosingDoor
+    AntiParallel2Toggle, Crossing2Toggle, Toggle2,
+    AntiParallelLocking2Toggle, CrossingLocking2Toggle, ParallelLocking2Toggle,
+    Door, SelfClosingDoor
 )
 from rl.search.env import GadgetSimulationEnv
 from rl.search.exhaustive.search import format_operation
 
 def plot_training_progress(rewards, title):
-    """Plot training progress"""
     plt.figure(figsize=(10, 5))
     plt.plot(rewards)
     plt.title(f'Training Progress - {title}')
@@ -29,867 +23,185 @@ def plot_training_progress(rewards, title):
     plt.savefig(f'training_{title.lower().replace(" ", "_")}.png')
     plt.close()
 
-def test_ap2t_sim_c2t():
-    """Test if AP2T can simulate C2T using RL."""
-    print("\n=== Testing RL AP2T -> C2T simulation ===")
-    
-    # Create initial gadgets
-    ap2t1 = AntiParallel2Toggle()
-    ap2t2 = AntiParallel2Toggle()
-    target = Crossing2Toggle()
-    
-    # Create and verify environment with increased max_steps for training
-    original_env = GadgetSimulationEnv([ap2t1, ap2t2], target, max_steps=200)
-    check_env(original_env)
-    
-    # Create vectorized environment
-    env = DummyVecEnv([lambda: original_env])
-    
-    # Create and train PPO agent with increased exploration and better learning parameters
-    model = PPO(
-        "MultiInputPolicy", 
-        env, 
-        learning_rate=0.0003,  # Increased learning rate
-        n_steps=512,  # Reduced for more frequent updates
-        batch_size=64,  # Smaller batches for more exploration
-        n_epochs=10,  # Fewer epochs to prevent overfitting
-        gamma=0.95,  # Reduced discount factor
-        gae_lambda=0.9,  # Reduced GAE lambda
-        clip_range=lambda _: 0.4,  # Make clip_range a callable
-        ent_coef=0.2,  # Higher entropy coefficient for more exploration
-        verbose=1
+def run_rl_simulation(
+    initial_gadgets,
+    target_gadget,
+    title="RL Simulation",
+    max_steps=200,
+    ppo_params=None,
+    max_episodes=100,
+    train_timesteps_per_ep=512,
+    exploration_schedule=None,
+    early_stop_patience=20,
+    reward_goal=100,
+    negative_reward_threshold=-1000,
+    verbose=True
+):
+    """
+    Runs RL for a gadget simulation.
+    All main training and evaluation options are parameterized.
+    """
+    # Create and check environment
+    env = GadgetSimulationEnv(initial_gadgets, target_gadget, max_steps=max_steps)
+    check_env(env)
+    venv = DummyVecEnv([lambda: env])
+
+    # Default PPO params
+    default_ppo = dict(
+        policy="MultiInputPolicy",
+        learning_rate=0.0003,
+        n_steps=512,
+        batch_size=64,
+        n_epochs=10,
+        gamma=0.95,
+        gae_lambda=0.9,
+        clip_range=lambda _: 0.4,
+        ent_coef=0.2,
+        verbose=0,
     )
-    
-    # Train for more episodes with better progress tracking
-    rewards = []
-    best_reward = float('-inf')
-    episodes_without_improvement = 0
-    max_episodes = 200  # Increased to 200 episodes
-    exploration_phase = 0  # Track exploration phase
-    
+    if ppo_params:
+        default_ppo.update(ppo_params)
+    model = PPO(env=venv, **default_ppo)
+
+    rewards, best_reward, no_improve = [], float('-inf'), 0
+    exploration_phase = 0
+    if not exploration_schedule:
+        # List of (patience, schedule) tuples. 
+        exploration_schedule = [
+            (10, lambda step, model, obs, env: model.predict(obs, deterministic=False)),
+            (10, lambda step, model, obs, env: (
+                [venv.action_space.sample()] if step % 5 == 0 else model.predict(obs, deterministic=False)
+            )),
+            (10, lambda step, model, obs, env: (
+                [venv.action_space.sample()] if step % 3 == 0 else model.predict(obs, deterministic=False)
+            )),
+        ]
+
     for episode in range(max_episodes):
-        # Train for one episode
-        model.learn(total_timesteps=512)  # Reduced steps per episode
-        
-        # Evaluate
-        obs = env.reset()
-        done = False
-        total_reward = 0
-        step_count = 0
+        model.learn(total_timesteps=train_timesteps_per_ep)
+        obs = venv.reset()
+        done, total_reward, steps = False, 0, 0
+
+        # Use correct exploration schedule based on no_improve
+        schedule_idx, patience_sum = 0, 0
+        for patience, _ in exploration_schedule:
+            patience_sum += patience
+            if no_improve < patience_sum:
+                break
+            schedule_idx += 1
+        explore_func = exploration_schedule[min(schedule_idx, len(exploration_schedule)-1)][1]
+
         while not done:
-            # Progressive exploration strategy
-            if episodes_without_improvement >= 10:
-                if exploration_phase == 0:
-                    # Phase 1: Mix random actions with policy
-                    if step_count % 5 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                elif exploration_phase == 1:
-                    # Phase 2: More random actions
-                    if step_count % 3 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                else:
-                    # Phase 3: Mostly random actions
-                    if step_count % 2 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-            else:
-                action, _states = model.predict(obs, deterministic=False)
-                
-            obs, reward, done, info = env.step(action)
+            action, *_ = explore_func(steps, model, obs, venv)
+            obs, reward, done, info = venv.step(action)
             total_reward += reward[0]
-            step_count += 1
-            
-            # Early stopping if reward gets too negative
-            if total_reward < -1000:
-                print(f"Stopping early due to very negative reward: {total_reward}")
-                done = True
+            steps += 1
+
+            if total_reward < negative_reward_threshold or total_reward > reward_goal:
                 break
-            
-            # Early stopping if we achieve a good reward
-            if total_reward > 100:
-                print(f"Stopping early due to good reward: {total_reward}")
-                done = True
-                break
-            
-            # Log intermediate state every 50 steps
-            if step_count % 50 == 0:
-                print(f"\nEpisode {episode+1}, Step {step_count}:")
-                print(f"Current reward: {total_reward}")
-                print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-                if env.envs[0].successful_operations:
-                    print("Recent operations:")
-                    for op in env.envs[0].successful_operations[-3:]:  # Show last 3 operations
-                        print(f"  - {format_operation(op)}")
-        
+
         rewards.append(total_reward)
-        print(f"\nTraining episode {episode+1}/{max_episodes} - Total reward: {total_reward}")
-        print(f"Number of gadgets: {len(env.envs[0].network.subgadgets)}")
-        print(f"Steps taken: {step_count}")
-        
-        # Track progress
+        if verbose:
+            print(f"Episode {episode+1}: reward={total_reward} steps={steps} gadgets={len(env.network.subgadgets)}")
+
         if total_reward > best_reward:
             best_reward = total_reward
-            episodes_without_improvement = 0
-            exploration_phase = 0  # Reset exploration phase on improvement
-            print("New best reward achieved!")
+            no_improve = 0
         else:
-            episodes_without_improvement += 1
-            print(f"No improvement for {episodes_without_improvement} episodes")
-            
-            # Progressive exploration phases
-            if episodes_without_improvement >= 10:
-                if exploration_phase < 2:  # Only increase phase if not at max
-                    exploration_phase += 1
-                    print(f"Entering exploration phase {exploration_phase + 1}")
-                    # Create new model with adjusted parameters
-                    new_clip_range = 0.4 + (0.2 * exploration_phase)
-                    new_ent_coef = 0.2 + (0.2 * exploration_phase)
-                    # Create new model with updated parameters
-                    new_model = PPO(
-                        "MultiInputPolicy", 
-                        env, 
-                        learning_rate=0.0003,
-                        n_steps=512,
-                        batch_size=64,
-                        n_epochs=10,
-                        gamma=0.95,
-                        gae_lambda=0.9,
-                        clip_range=lambda _: new_clip_range,
-                        ent_coef=new_ent_coef,
-                        verbose=1
-                    )
-                    # Transfer parameters from old model to new model
-                    new_model.set_parameters(model.get_parameters())
-                    model = new_model
-        
-        # Less aggressive early stopping
-        if episodes_without_improvement >= 20 and episode >= 50:  # More lenient early stopping
-            print("Early stopping due to no improvement")
+            no_improve += 1
+
+        if no_improve >= early_stop_patience and episode >= early_stop_patience:
+            if verbose:
+                print("Early stopping due to lack of improvement.")
             break
-    
-    # Plot training progress
-    plot_training_progress(rewards, "AP2T to C2T")
-    
-    print("\nTesting trained agent...")
-    # Create a new environment with shorter max_steps for testing
-    test_env = GadgetSimulationEnv([ap2t1, ap2t2], target, max_steps=50)  # Shorter for testing
-    test_env = DummyVecEnv([lambda: test_env])
-    
-    obs = test_env.reset()
-    done = False
-    total_reward = 0
-    steps = 0
-    max_test_steps = 50  # Limit test steps
-    
-    while not done and steps < max_test_steps:
-        action, _states = model.predict(obs, deterministic=True)
-        obs, reward, done, info = test_env.step(action)
+
+    plot_training_progress(rewards, title)
+
+    # Test agent
+    test_env = GadgetSimulationEnv(initial_gadgets, target_gadget, max_steps=50)
+    test_venv = DummyVecEnv([lambda: test_env])
+    obs = test_venv.reset()
+    done, total_reward, steps = False, 0, 0
+    while not done and steps < 50:
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, info = test_venv.step(action)
         total_reward += reward[0]
         steps += 1
-        
-        # Early stopping conditions for testing
-        if total_reward < -1000:
-            print(f"Stopping test due to very negative reward: {total_reward}")
-            break
-        if total_reward > 100:
-            print(f"Stopping test due to good reward: {total_reward}")
+        if total_reward < negative_reward_threshold or total_reward > reward_goal:
             break
         if 'error' in info[0]:
-            print(f"Error: {info[0]['error']}")
+            print("Test error:", info[0]['error'])
             break
-    
-    print(f"Final total reward: {total_reward}")
-    print(f"Final number of gadgets: {len(test_env.envs[0].network.subgadgets)}")
-    
-    print("\nOperation sequence:")
-    for op in test_env.envs[0].successful_operations:
-        print(format_operation(op))
-    
-    # Test if the simplified network matches the target
-    simplified = test_env.envs[0].network.simplify()
-    print("\nProposed solution:")
-    print(simplified)
-    print("\nTarget gadget:")
-    print(target)
-    
-    if simplified == target:
-        print("✅ Test passed: Found valid solution")
-        print("\nOperation sequence:")
-        for i, op in enumerate(test_env.envs[0].operation_history, 1):
-            print(f"Step {i}: {format_operation(op)}")
-        return True
-    else:
-        print("❌ Test failed: No valid solution found")
-        print("  - Simplified gadget does not match target")
-        return False
 
-def test_cl2t_sim_pl2t():
-    """Test if RL can learn to simulate PL2T using two CL2Ts"""
-    print("\n=== Testing RL CL2T -> PL2T simulation ===")
-    
-    # Initial gadgets
-    cl2t1 = CrossingLocking2Toggle()
-    cl2t2 = CrossingLocking2Toggle()
-    target = ParallelLocking2Toggle()
-    
-    # Create environment with increased max_steps
-    original_env = GadgetSimulationEnv(
-        initial_gadgets=[cl2t1, cl2t2],
-        target_gadget=target,
-        max_steps=200  # Increased from 50
-    )
-    
-    # Verify environment
-    check_env(original_env)
-    
-    # Create vectorized environment
-    env = DummyVecEnv([lambda: original_env])
-    
-    # Create and train agent with better parameters
-    model = PPO(
-        "MultiInputPolicy", 
-        env, 
-        learning_rate=0.0003,
-        n_steps=512,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.95,
-        gae_lambda=0.9,
-        clip_range=lambda _: 0.4,  # Make clip_range a callable
-        ent_coef=0.2,
-        verbose=1
-    )
-    
-    # Train for more episodes with better progress tracking
-    rewards = []
-    best_reward = float('-inf')
-    episodes_without_improvement = 0
-    max_episodes = 200  # Increased to 200 episodes
-    exploration_phase = 0  # Track exploration phase
-    
-    for episode in range(max_episodes):
-        # Train for one episode
-        model.learn(total_timesteps=512)
-        
-        # Evaluate
-        obs = env.reset()
-        done = False
-        total_reward = 0
-        step_count = 0
-        while not done:
-            # Progressive exploration strategy
-            if episodes_without_improvement >= 10:
-                if exploration_phase == 0:
-                    # Phase 1: Mix random actions with policy
-                    if step_count % 5 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                elif exploration_phase == 1:
-                    # Phase 2: More random actions
-                    if step_count % 3 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                else:
-                    # Phase 3: Mostly random actions
-                    if step_count % 2 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-            else:
-                action, _states = model.predict(obs, deterministic=False)
-                
-            obs, reward, done, info = env.step(action)
-            total_reward += reward[0]
-            step_count += 1
-            
-            # Early stopping if reward gets too negative
-            if total_reward < -1000:
-                print(f"Stopping early due to very negative reward: {total_reward}")
-                done = True
-                break
-            
-            # Early stopping if we achieve a good reward
-            if total_reward > 100:
-                print(f"Stopping early due to good reward: {total_reward}")
-                done = True
-                break
-            
-            # Log intermediate state every 50 steps
-            if step_count % 50 == 0:
-                print(f"\nEpisode {episode+1}, Step {step_count}:")
-                print(f"Current reward: {total_reward}")
-                print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-                if env.envs[0].successful_operations:
-                    print("Recent operations:")
-                    for op in env.envs[0].successful_operations[-3:]:
-                        print(f"  - {format_operation(op)}")
-        
-        rewards.append(total_reward)
-        print(f"\nTraining episode {episode+1}/{max_episodes} - Total reward: {total_reward}")
-        print(f"Number of gadgets: {len(env.envs[0].network.subgadgets)}")
-        print(f"Steps taken: {step_count}")
-        
-        # Track progress
-        if total_reward > best_reward:
-            best_reward = total_reward
-            episodes_without_improvement = 0
-            exploration_phase = 0  # Reset exploration phase on improvement
-            print("New best reward achieved!")
-        else:
-            episodes_without_improvement += 1
-            print(f"No improvement for {episodes_without_improvement} episodes")
-            
-            # Progressive exploration phases
-            if episodes_without_improvement >= 10:
-                if exploration_phase < 2:  # Only increase phase if not at max
-                    exploration_phase += 1
-                    print(f"Entering exploration phase {exploration_phase + 1}")
-                    # Create new model with adjusted parameters
-                    new_clip_range = 0.4 + (0.2 * exploration_phase)
-                    new_ent_coef = 0.2 + (0.2 * exploration_phase)
-                    # Create new model with updated parameters
-                    new_model = PPO(
-                        "MultiInputPolicy", 
-                        env, 
-                        learning_rate=0.0003,
-                        n_steps=512,
-                        batch_size=64,
-                        n_epochs=10,
-                        gamma=0.95,
-                        gae_lambda=0.9,
-                        clip_range=lambda _: new_clip_range,
-                        ent_coef=new_ent_coef,
-                        verbose=1
-                    )
-                    # Transfer parameters from old model to new model
-                    new_model.set_parameters(model.get_parameters())
-                    model = new_model
-        
-        # Less aggressive early stopping
-        if episodes_without_improvement >= 20 and episode >= 50:
-            print("Early stopping due to no improvement")
-            break
-    
-    # Plot training progress
-    plot_training_progress(rewards, "CL2T to PL2T")
-    
-    # Test the trained agent
-    print("\nTesting trained agent...")
-    obs = env.reset()
-    done = False
-    total_reward = 0
-    step_count = 0
-    
-    while not done:
-        action, _states = model.predict(obs, deterministic=True)
-        obs, reward, done, info = env.step(action)
-        total_reward += reward[0]
-        step_count += 1
-        
-        # Early stopping conditions for testing
-        if total_reward < -1000:
-            print(f"Stopping test due to very negative reward: {total_reward}")
-            break
-        if total_reward > 100:
-            print(f"Stopping test due to good reward: {total_reward}")
-            break
-        
-        # Log intermediate state every 10 steps during testing
-        if step_count % 10 == 0:
-            print(f"\nTest Step {step_count}:")
-            print(f"Current reward: {total_reward}")
-            print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-            if env.envs[0].successful_operations:
-                print("Recent operations:")
-                for op in env.envs[0].successful_operations[-3:]:
-                    print(f"  - {format_operation(op)}")
-        
-        if "error" in info[0]:
-            print(f"Error: {info[0]['error']}")
-            break
-            
-    print(f"Final total reward: {total_reward}")
-    print(f"Final number of gadgets: {len(original_env.network.subgadgets)}")
-    
-    # Print operation sequence
-    print("\nOperation sequence:")
-    for op in original_env.successful_operations:
-        print(format_operation(op))
-    
-    # Test if the simplified network matches the target
-    simplified = original_env.network.simplify()
-    print("\nProposed solution:")
-    print(simplified)
-    print("\nTarget gadget:")
-    print(target)
-    
-    if simplified == target:
-        print("✅ Test passed: Found valid solution")
-        print("\nOperation sequence:")
-        for i, op in enumerate(original_env.operation_history, 1):
-            print(f"Step {i}: {format_operation(op)}")
-        return True
-    else:
-        print("❌ Test failed: No valid solution found")
-        print("  - Simplified gadget does not match target")
-        return False
+    simplified = test_env.network.simplify()
+    passed = (simplified == target_gadget)
+    if verbose:
+        print(f"\nTest result for {title}:")
+        print(f"Final total reward: {total_reward}")
+        print("Proposed solution:", simplified)
+        print("Target gadget:", target_gadget)
+        print("✅ Passed" if passed else "❌ Failed")
+        if hasattr(test_env, "successful_operations"):
+            print("Operation sequence:")
+            for i, op in enumerate(test_env.successful_operations, 1):
+                print(f"Step {i}: {format_operation(op)}")
+    return passed
 
-def test_door_sim_scd():
-    """Test if RL can learn to simulate SelfClosingDoor using two Doors"""
-    print("\n=== Testing RL Door -> SelfClosingDoor simulation ===")
-    
-    # Initial gadgets
-    door1 = Door()
-    door2 = Door()
-    target = SelfClosingDoor()
-    
-    # Create environment
-    original_env = GadgetSimulationEnv(
-        initial_gadgets=[door1, door2],
-        target_gadget=target,
-        max_steps=200  # Increased from 50
-    )
-    
-    # Verify environment
-    check_env(original_env)
-    
-    # Create vectorized environment
-    env = DummyVecEnv([lambda: original_env])
-    
-    # Create and train agent with better parameters
-    model = PPO(
-        "MultiInputPolicy", 
-        env, 
-        learning_rate=0.0003,
-        n_steps=512,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.95,
-        gae_lambda=0.9,
-        clip_range=lambda _: 0.4,  # Make clip_range a callable
-        ent_coef=0.2,
-        verbose=1
-    )
-    
-    # Train for more episodes with better progress tracking
-    rewards = []
-    best_reward = float('-inf')
-    episodes_without_improvement = 0
-    max_episodes = 200  # Increased to 200 episodes
-    exploration_phase = 0  # Track exploration phase
-    
-    for episode in range(max_episodes):
-        # Train for one episode
-        model.learn(total_timesteps=512)
-        
-        # Evaluate
-        obs = env.reset()
-        done = False
-        total_reward = 0
-        step_count = 0
-        while not done:
-            # Progressive exploration strategy
-            if episodes_without_improvement >= 10:
-                if exploration_phase == 0:
-                    # Phase 1: Mix random actions with policy
-                    if step_count % 5 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                elif exploration_phase == 1:
-                    # Phase 2: More random actions
-                    if step_count % 3 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                else:
-                    # Phase 3: Mostly random actions
-                    if step_count % 2 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-            else:
-                action, _states = model.predict(obs, deterministic=False)
-                
-            obs, reward, done, info = env.step(action)
-            total_reward += reward[0]
-            step_count += 1
-            
-            # Early stopping if reward gets too negative
-            if total_reward < -1000:
-                print(f"Stopping early due to very negative reward: {total_reward}")
-                done = True
-                break
-            
-            # Early stopping if we achieve a good reward
-            if total_reward > 100:
-                print(f"Stopping early due to good reward: {total_reward}")
-                done = True
-                break
-            
-            # Log intermediate state every 50 steps
-            if step_count % 50 == 0:
-                print(f"\nEpisode {episode+1}, Step {step_count}:")
-                print(f"Current reward: {total_reward}")
-                print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-                if env.envs[0].successful_operations:
-                    print("Recent operations:")
-                    for op in env.envs[0].successful_operations[-3:]:
-                        print(f"  - {format_operation(op)}")
-        
-        rewards.append(total_reward)
-        print(f"\nTraining episode {episode+1}/{max_episodes} - Total reward: {total_reward}")
-        print(f"Number of gadgets: {len(env.envs[0].network.subgadgets)}")
-        print(f"Steps taken: {step_count}")
-        
-        # Track progress
-        if total_reward > best_reward:
-            best_reward = total_reward
-            episodes_without_improvement = 0
-            exploration_phase = 0  # Reset exploration phase on improvement
-            print("New best reward achieved!")
-        else:
-            episodes_without_improvement += 1
-            print(f"No improvement for {episodes_without_improvement} episodes")
-            
-            # Progressive exploration phases
-            if episodes_without_improvement >= 10:
-                if exploration_phase < 2:  # Only increase phase if not at max
-                    exploration_phase += 1
-                    print(f"Entering exploration phase {exploration_phase + 1}")
-                    # Create new model with adjusted parameters
-                    new_clip_range = 0.4 + (0.2 * exploration_phase)
-                    new_ent_coef = 0.2 + (0.2 * exploration_phase)
-                    # Create new model with updated parameters
-                    new_model = PPO(
-                        "MultiInputPolicy", 
-                        env, 
-                        learning_rate=0.0003,
-                        n_steps=512,
-                        batch_size=64,
-                        n_epochs=10,
-                        gamma=0.95,
-                        gae_lambda=0.9,
-                        clip_range=lambda _: new_clip_range,
-                        ent_coef=new_ent_coef,
-                        verbose=1
-                    )
-                    # Transfer parameters from old model to new model
-                    new_model.set_parameters(model.get_parameters())
-                    model = new_model
-        
-        # Less aggressive early stopping
-        if episodes_without_improvement >= 20 and episode >= 50:
-            print("Early stopping due to no improvement")
-            break
-    
-    # Plot training progress
-    plot_training_progress(rewards, "Door to SelfClosingDoor")
-    
-    # Test the trained agent
-    print("\nTesting trained agent...")
-    obs = env.reset()
-    done = False
-    total_reward = 0
-    step_count = 0
-    
-    while not done:
-        action, _states = model.predict(obs, deterministic=True)
-        obs, reward, done, info = env.step(action)
-        total_reward += reward[0]
-        step_count += 1
-        
-        # Early stopping conditions for testing
-        if total_reward < -1000:
-            print(f"Stopping test due to very negative reward: {total_reward}")
-            break
-        if total_reward > 100:
-            print(f"Stopping test due to good reward: {total_reward}")
-            break
-        
-        # Log intermediate state every 10 steps during testing
-        if step_count % 10 == 0:
-            print(f"\nTest Step {step_count}:")
-            print(f"Current reward: {total_reward}")
-            print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-            if env.envs[0].successful_operations:
-                print("Recent operations:")
-                for op in env.envs[0].successful_operations[-3:]:
-                    print(f"  - {format_operation(op)}")
-        
-        if "error" in info[0]:
-            print(f"Error: {info[0]['error']}")
-            break
-            
-    print(f"Final total reward: {total_reward}")
-    print(f"Final number of gadgets: {len(original_env.network.subgadgets)}")
-    
-    # Print operation sequence
-    print("\nOperation sequence:")
-    for op in original_env.successful_operations:
-        print(format_operation(op))
-    
-    # Test if the simplified network matches the target
-    simplified = original_env.network.simplify()
-    print("\nProposed solution:")
-    print(simplified)
-    print("\nTarget gadget:")
-    print(target)
-    
-    if simplified == target:
-        print("✅ Test passed: Found valid solution")
-        print("\nOperation sequence:")
-        for i, op in enumerate(original_env.operation_history, 1):
-            print(f"Step {i}: {format_operation(op)}")
-        return True
-    else:
-        print("❌ Test failed: No valid solution found")
-        print("  - Simplified gadget does not match target")
-        return False
+########################
+# Define your tests here
+########################
 
-def test_c2t_sim_p2t():
-    """Test if RL can learn to simulate Toggle2 using two Crossing2Toggles"""
-    print("\n=== Testing RL C2T -> Toggle2 simulation ===")
-    
-    # Initial gadgets
-    c2t1 = Crossing2Toggle()
-    c2t2 = Crossing2Toggle()
-    target = Toggle2()
-    
-    # Create environment
-    original_env = GadgetSimulationEnv(
-        initial_gadgets=[c2t1, c2t2],
-        target_gadget=target,
-        max_steps=200  # Increased from 50
-    )
-    
-    # Verify environment
-    check_env(original_env)
-    
-    # Create vectorized environment
-    env = DummyVecEnv([lambda: original_env])
-    
-    # Create and train agent with better parameters
-    model = PPO(
-        "MultiInputPolicy", 
-        env, 
-        learning_rate=0.0003,
-        n_steps=512,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.95,
-        gae_lambda=0.9,
-        clip_range=lambda _: 0.4,  # Make clip_range a callable
-        ent_coef=0.2,
-        verbose=1
-    )
-    
-    # Train for more episodes with better progress tracking
-    rewards = []
-    best_reward = float('-inf')
-    episodes_without_improvement = 0
-    max_episodes = 200  # Increased to 200 episodes
-    exploration_phase = 0  # Track exploration phase
-    
-    for episode in range(max_episodes):
-        # Train for one episode
-        model.learn(total_timesteps=512)
-        
-        # Evaluate
-        obs = env.reset()
-        done = False
-        total_reward = 0
-        step_count = 0
-        while not done:
-            # Progressive exploration strategy
-            if episodes_without_improvement >= 10:
-                if exploration_phase == 0:
-                    # Phase 1: Mix random actions with policy
-                    if step_count % 5 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                elif exploration_phase == 1:
-                    # Phase 2: More random actions
-                    if step_count % 3 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-                else:
-                    # Phase 3: Mostly random actions
-                    if step_count % 2 == 0:
-                        action = [env.action_space.sample()]
-                    else:
-                        action, _states = model.predict(obs, deterministic=False)
-            else:
-                action, _states = model.predict(obs, deterministic=False)
-                
-            obs, reward, done, info = env.step(action)
-            total_reward += reward[0]
-            step_count += 1
-            
-            # Early stopping if reward gets too negative
-            if total_reward < -1000:
-                print(f"Stopping early due to very negative reward: {total_reward}")
-                done = True
-                break
-            
-            # Early stopping if we achieve a good reward
-            if total_reward > 100:
-                print(f"Stopping early due to good reward: {total_reward}")
-                done = True
-                break
-            
-            # Log intermediate state every 50 steps
-            if step_count % 50 == 0:
-                print(f"\nEpisode {episode+1}, Step {step_count}:")
-                print(f"Current reward: {total_reward}")
-                print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-                if env.envs[0].successful_operations:
-                    print("Recent operations:")
-                    for op in env.envs[0].successful_operations[-3:]:
-                        print(f"  - {format_operation(op)}")
-        
-        rewards.append(total_reward)
-        print(f"\nTraining episode {episode+1}/{max_episodes} - Total reward: {total_reward}")
-        print(f"Number of gadgets: {len(env.envs[0].network.subgadgets)}")
-        print(f"Steps taken: {step_count}")
-        
-        # Track progress
-        if total_reward > best_reward:
-            best_reward = total_reward
-            episodes_without_improvement = 0
-            exploration_phase = 0  # Reset exploration phase on improvement
-            print("New best reward achieved!")
-        else:
-            episodes_without_improvement += 1
-            print(f"No improvement for {episodes_without_improvement} episodes")
-            
-            # Progressive exploration phases
-            if episodes_without_improvement >= 10:
-                if exploration_phase < 2:  # Only increase phase if not at max
-                    exploration_phase += 1
-                    print(f"Entering exploration phase {exploration_phase + 1}")
-                    # Create new model with adjusted parameters
-                    new_clip_range = 0.4 + (0.2 * exploration_phase)
-                    new_ent_coef = 0.2 + (0.2 * exploration_phase)
-                    # Create new model with updated parameters
-                    new_model = PPO(
-                        "MultiInputPolicy", 
-                        env, 
-                        learning_rate=0.0003,
-                        n_steps=512,
-                        batch_size=64,
-                        n_epochs=10,
-                        gamma=0.95,
-                        gae_lambda=0.9,
-                        clip_range=lambda _: new_clip_range,
-                        ent_coef=new_ent_coef,
-                        verbose=1
-                    )
-                    # Transfer parameters from old model to new model
-                    new_model.set_parameters(model.get_parameters())
-                    model = new_model
-        
-        # Less aggressive early stopping
-        if episodes_without_improvement >= 20 and episode >= 50:
-            print("Early stopping due to no improvement")
-            break
-    
-    # Plot training progress
-    plot_training_progress(rewards, "C2T to Toggle2")
-    
-    # Test the trained agent
-    print("\nTesting trained agent...")
-    obs = env.reset()
-    done = False
-    total_reward = 0
-    step_count = 0
-    
-    while not done:
-        action, _states = model.predict(obs, deterministic=True)
-        obs, reward, done, info = env.step(action)
-        total_reward += reward[0]
-        step_count += 1
-        
-        # Early stopping conditions for testing
-        if total_reward < -1000:
-            print(f"Stopping test due to very negative reward: {total_reward}")
-            break
-        if total_reward > 100:
-            print(f"Stopping test due to good reward: {total_reward}")
-            break
-        
-        # Log intermediate state every 10 steps during testing
-        if step_count % 10 == 0:
-            print(f"\nTest Step {step_count}:")
-            print(f"Current reward: {total_reward}")
-            print(f"Current number of gadgets: {len(env.envs[0].network.subgadgets)}")
-            if env.envs[0].successful_operations:
-                print("Recent operations:")
-                for op in env.envs[0].successful_operations[-3:]:
-                    print(f"  - {format_operation(op)}")
-        
-        if "error" in info[0]:
-            print(f"Error: {info[0]['error']}")
-            break
-            
-    print(f"Final total reward: {total_reward}")
-    print(f"Final number of gadgets: {len(original_env.network.subgadgets)}")
-    
-    # Print operation sequence
-    print("\nOperation sequence:")
-    for op in original_env.successful_operations:
-        print(format_operation(op))
-    
-    # Test if the simplified network matches the target
-    simplified = original_env.network.simplify()
-    print("\nProposed solution:")
-    print(simplified)
-    print("\nTarget gadget:")
-    print(target)
-    
-    if simplified == target:
-        print("✅ Test passed: Found valid solution")
-        print("\nOperation sequence:")
-        for i, op in enumerate(original_env.operation_history, 1):
-            print(f"Step {i}: {format_operation(op)}")
-        return True
-    else:
-        print("❌ Test failed: No valid solution found")
-        print("  - Simplified gadget does not match target")
-        return False
+RL_TESTS = {
+    "AP2T -> C2T": {
+        "initial_gadgets": [AntiParallel2Toggle(), AntiParallel2Toggle()],
+        "target_gadget": Crossing2Toggle(),
+        "ppo_params": {},
+    },
+    "CL2T -> PL2T": {
+        "initial_gadgets": [CrossingLocking2Toggle(), CrossingLocking2Toggle()],
+        "target_gadget": ParallelLocking2Toggle(),
+        "ppo_params": {},
+    },
+    "Door -> SelfClosingDoor": {
+        "initial_gadgets": [Door(), Door()],
+        "target_gadget": SelfClosingDoor(),
+        "ppo_params": {},
+    },
+    "C2T -> Toggle2": {
+        "initial_gadgets": [Crossing2Toggle(), Crossing2Toggle()],
+        "target_gadget": Toggle2(),
+        "ppo_params": {"learning_rate": 0.1, "n_epochs": 20, "gamma": 0.94},
+        "max_episodes": 50,
+        "train_timesteps_per_ep": 1024,
+    },
+    # Add more tests here easily!
+}
 
-def run_all_tests():
-    """Run all RL tests"""
-    print("\n=== Running All RL Tests ===")
-    tests = [
-        ("AP2T -> C2T", test_ap2t_sim_c2t),
-        ("CL2T -> PL2T", test_cl2t_sim_pl2t),
-        ("Door -> SelfClosingDoor", test_door_sim_scd),
-        ("C2T -> Toggle2", test_c2t_sim_p2t)
-    ]
-    
-    results = []
-    for name, test in tests:
-        print(f"\nStarting test: {name}")
-        result = test()
-        results.append(result)
-        print(f"Test {name}: {'✅ PASSED' if result else '❌ FAILED'}")
-    
+def run_all_rl_tests(selected_tests=None, **override_params):
+    tests = RL_TESTS if selected_tests is None else {k: RL_TESTS[k] for k in selected_tests}
+    results = {}
+    for test_name, params in tests.items():
+        print(f"\nRunning test: {test_name}")
+        config = dict(
+            max_episodes=params.get("max_episodes", 100),
+            train_timesteps_per_ep=params.get("train_timesteps_per_ep", 512),
+        )
+        config.update({k: v for k, v in params.items() if k not in {"initial_gadgets", "target_gadget"}})
+        config.update(override_params)  # For user override
+        passed = run_rl_simulation(
+            initial_gadgets=params["initial_gadgets"],
+            target_gadget=params["target_gadget"],
+            title=test_name,
+            **config
+        )
+        results[test_name] = passed
+        print(f"{test_name}: {'✅ PASSED' if passed else '❌ FAILED'}")
     print("\n=== Test Summary ===")
-    print(f"Total tests: {len(tests)}")
-    print(f"Passed: {sum(results)}")
-    print(f"Failed: {len(tests) - sum(results)}")
-    
-    return all(results)
+    print("Total:", len(results), "Passed:", sum(results.values()), "Failed:", len(results) - sum(results.values()))
+    return all(results.values())
 
 if __name__ == "__main__":
-    run_all_tests() 
+    # Example usage: run_all_rl_tests()
+    run_all_rl_tests()
+    # Example: run a single test with custom PPO params
+    # run_all_rl_tests(["AP2T -> C2T"], ppo_params={"learning_rate": 0.005, "ent_coef": 0.5}, max_episodes=30)
