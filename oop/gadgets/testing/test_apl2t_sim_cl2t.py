@@ -13,12 +13,12 @@ def test_apl2t_sim_cl2t():
     net += apl2t2
     
     # Use do_combine and add the result to the network
-    combined = net.do_combine(0, 1, rotation=0, splicing_index=1)
+    combined = net.do_combine(0, 1, rotation=0, splice=1)
     net += combined  # Add the combined gadget to the network
     
     # Connect using the index of the combined gadget (which is 2)
-    net.connect(2, 1, 5)
-    net.connect(2, 2, 6)
+    net.connect(-1, 1, 5)
+    net.connect(-1, 2, 6)
     
     res = net.simplify()
     print(res)

@@ -1,3 +1,8 @@
+import sys
+import os
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+if project_root not in sys.path:
+    sys.path.append(project_root)
 from oop.gadgets.gadgetdefs import AntiParallel2Toggle, Crossing2Toggle
 from oop.gadgets.gadgetlike import GadgetNetwork
 
@@ -13,23 +18,24 @@ def test_ap2t_sim_c2t():
     ap2t2.setCurrentState(1)
     net += ap2t2
     
+    print("Initial network:")
     print(net)
     
     # Use do_combine instead of combine to get the actual gadget
-    combined = net.do_combine(0, 1, rotation=0, splicing_index=1)
-    net += combined  # Add the combined gadget to the network
+    net.do_combine(0, 1, rotation=0, splice=1)
+   
     
-    print(combined, type(combined))
+    # Now connect, 
+    net.connect(-1, 1, 5)
+    net.connect(-1, 2, 6)
     
-    # Now connect using the index of the combined gadget (which is 2)
-    net.connect(2, 1, 5)
-    net.connect(2, 2, 6)
     
     res = net.simplify()
     
     net2 = GadgetNetwork()
     net2 += Crossing2Toggle()
     res2 = net2.simplify()
+    print(res, res2)
     
     assert(res == res2)
 

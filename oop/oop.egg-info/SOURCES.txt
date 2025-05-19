@@ -4,6 +4,13 @@ dfa/hopcroft.py
 gadgets/__init__.py
 gadgets/gadgetdefs.py
 gadgets/gadgetlike.py
+gadgets/testing/__init__.py
+gadgets/testing/test_ap2t_sim_c2t.py
+gadgets/testing/test_apl2t_sim_cl2t.py
+gadgets/testing/test_c2t_sim_p2t.py
+gadgets/testing/test_cl2t_sim_pl2t.py
+gadgets/testing/more_testing/__init__.py
+gadgets/testing/more_testing/equivalence.py
 oop.egg-info/PKG-INFO
 oop.egg-info/SOURCES.txt
 oop.egg-info/dependency_links.txt

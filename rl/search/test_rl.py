@@ -1,8 +1,16 @@
-from stable_baselines3 import PPO
+import os
+import sys
+from tqdm import tqdm
+import numpy as np
+from stable_baselines3 import DQN
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 import matplotlib.pyplot as plt
-import numpy as np
+from gymnasium import spaces
+
+# Add the project root directory to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.append(project_root)
 
 # Import your gadget classes and env
 from oop.gadgets.gadgetdefs import (
@@ -11,14 +19,21 @@ from oop.gadgets.gadgetdefs import (
     Door, SelfClosingDoor
 )
 from rl.search.env import GadgetSimulationEnv
-from rl.search.exhaustive.search import format_operation
+from rl.search.exhaustive.search import format_operation, get_possible_operations
 
 def plot_training_progress(rewards, title):
     plt.figure(figsize=(10, 5))
-    plt.plot(rewards)
+    # Plot raw rewards
+    plt.plot(rewards, alpha=0.3, label='Raw Rewards')
+    # Plot moving average
+    window_size = min(10, len(rewards))
+    if window_size > 0:
+        moving_avg = np.convolve(rewards, np.ones(window_size)/window_size, mode='valid')
+        plt.plot(range(window_size-1, len(rewards)), moving_avg, label=f'{window_size}-Episode Moving Average')
     plt.title(f'Training Progress - {title}')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
+    plt.legend()
     plt.grid(True)
     plt.savefig(f'training_{title.lower().replace(" ", "_")}.png')
     plt.close()
@@ -27,125 +42,116 @@ def run_rl_simulation(
     initial_gadgets,
     target_gadget,
     title="RL Simulation",
-    max_steps=200,
-    ppo_params=None,
-    max_episodes=100,
-    train_timesteps_per_ep=512,
-    exploration_schedule=None,
-    early_stop_patience=20,
-    reward_goal=100,
-    negative_reward_threshold=-1000,
-    verbose=True
+    max_steps=8,
+    dqn_params=None,
+    seed_trajectories=None,      # list of expert op‐lists, e.g. `[ [("COMBINE",...),...,("STOP",)] ]`
+    total_timesteps=10_000,       # overall training budget
+    eval_episodes=50,             # for final deterministic evaluation
+    verbose=True,
 ):
     """
-    Runs RL for a gadget simulation.
-    All main training and evaluation options are parameterized.
+    Runs a DQN agent to build target_gadget from initial_gadgets.
+    - Seeds replay buffer with seed_trajectories if provided.
+    - Trains for total_timesteps with prioritized replay.
+    - Evaluates over eval_episodes deterministic rollouts.
+    Returns (model, success_rate).
     """
-    # Create and check environment
-    env = GadgetSimulationEnv(initial_gadgets, target_gadget, max_steps=max_steps)
-    check_env(env)
-    venv = DummyVecEnv([lambda: env])
+    # 1) Build and wrap environments
+    train_env = GadgetSimulationEnv(initial_gadgets, target_gadget, max_steps=max_steps)
+    check_env(train_env)
+    venv = DummyVecEnv([lambda: GadgetSimulationEnv(initial_gadgets, target_gadget, max_steps=max_steps)])
 
-    # Default PPO params
-    default_ppo = dict(
+    # 2) DQN hyperparams (override via dqn_params)
+    default_dqn = dict(
         policy="MultiInputPolicy",
-        learning_rate=0.0003,
-        n_steps=512,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.95,
-        gae_lambda=0.9,
-        clip_range=lambda _: 0.4,
-        ent_coef=0.2,
+        learning_rate=1e-4,
+        buffer_size=5_000,
+        learning_starts=1,
+        batch_size=32,
+        train_freq=4,
+        gradient_steps=1,
+        target_update_interval=500,
+        tau=0.1,
+        gamma=0.99,
+        exploration_fraction=0.1,
+        exploration_initial_eps=1.0,
+        exploration_final_eps=0.05,
+        prioritized_replay=True,
+        prioritized_replay_alpha=0.6,
+        policy_kwargs=dict(net_arch=[64, 64]),
         verbose=0,
     )
-    if ppo_params:
-        default_ppo.update(ppo_params)
-    model = PPO(env=venv, **default_ppo)
+    if dqn_params:
+        default_dqn.update(dqn_params)
 
-    rewards, best_reward, no_improve = [], float('-inf'), 0
-    exploration_phase = 0
-    if not exploration_schedule:
-        # List of (patience, schedule) tuples. 
-        exploration_schedule = [
-            (10, lambda step, model, obs, env: model.predict(obs, deterministic=False)),
-            (10, lambda step, model, obs, env: (
-                [venv.action_space.sample()] if step % 5 == 0 else model.predict(obs, deterministic=False)
-            )),
-            (10, lambda step, model, obs, env: (
-                [venv.action_space.sample()] if step % 3 == 0 else model.predict(obs, deterministic=False)
-            )),
-        ]
+    model = DQN(env=venv, **default_dqn)
 
-    for episode in range(max_episodes):
-        model.learn(total_timesteps=train_timesteps_per_ep)
-        obs = venv.reset()
-        done, total_reward, steps = False, 0, 0
+    # 3) Seed replay buffer with expert demos
+    if seed_trajectories:
+        for demo in seed_trajectories:
+            obs = venv.reset()[0]
+            done = False
+            for op in demo:
+                possible_ops = get_possible_operations(train_env.network)
+                if op not in possible_ops:
+                    break
+                idx = possible_ops.index(op)
+                next_obs, reward, done, _, _ = venv.step([idx])
+                model.replay_buffer.add(
+                    obs=obs,
+                    next_obs=next_obs,
+                    action=idx,
+                    reward=reward,
+                    done=done,
+                    infos={},
+                )
+                obs = next_obs
+                if done:
+                    break
 
-        # Use correct exploration schedule based on no_improve
-        schedule_idx, patience_sum = 0, 0
-        for patience, _ in exploration_schedule:
-            patience_sum += patience
-            if no_improve < patience_sum:
+    # 4) Train for a fixed timestep budget
+    pbar = tqdm(total=total_timesteps, desc=f"Training {title}")
+    timesteps = 0
+    while timesteps < total_timesteps:
+        # train_freq steps per batch
+        model.learn(total_timesteps=default_dqn["train_freq"],
+                    reset_num_timesteps=False)
+        timesteps += default_dqn["train_freq"]
+        pbar.update(default_dqn["train_freq"])
+    pbar.close()
+
+    # 5) Final deterministic evaluation
+    successes = 0
+    for _ in range(eval_episodes):
+        obs = venv.reset()[0]
+        done = False
+        steps = 0
+        # reset the env’s network if needed
+        train_env.network = deepcopy(train_env.network)
+        train_env.operation_history.clear()
+
+        while not done and steps < max_steps:
+            possible_ops = get_possible_operations(train_env.network)
+            if not possible_ops:
                 break
-            schedule_idx += 1
-        explore_func = exploration_schedule[min(schedule_idx, len(exploration_schedule)-1)][1]
-
-        while not done:
-            action, *_ = explore_func(steps, model, obs, venv)
-            obs, reward, done, info = venv.step(action)
-            total_reward += reward[0]
+            action, _ = model.predict(obs, deterministic=True)
+            action = action[0]
+            if action >= len(possible_ops):
+                action = np.random.randint(len(possible_ops))
+            obs, reward, done, _, _ = venv.step([action])
             steps += 1
 
-            if total_reward < negative_reward_threshold or total_reward > reward_goal:
-                break
+        # after episode, check if final gadget matches
+        final = train_env.network.simplify()
+        if final == target_gadget:
+            successes += 1
 
-        rewards.append(total_reward)
-        if verbose:
-            print(f"Episode {episode+1}: reward={total_reward} steps={steps} gadgets={len(env.network.subgadgets)}")
-
-        if total_reward > best_reward:
-            best_reward = total_reward
-            no_improve = 0
-        else:
-            no_improve += 1
-
-        if no_improve >= early_stop_patience and episode >= early_stop_patience:
-            if verbose:
-                print("Early stopping due to lack of improvement.")
-            break
-
-    plot_training_progress(rewards, title)
-
-    # Test agent
-    test_env = GadgetSimulationEnv(initial_gadgets, target_gadget, max_steps=50)
-    test_venv = DummyVecEnv([lambda: test_env])
-    obs = test_venv.reset()
-    done, total_reward, steps = False, 0, 0
-    while not done and steps < 50:
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, done, info = test_venv.step(action)
-        total_reward += reward[0]
-        steps += 1
-        if total_reward < negative_reward_threshold or total_reward > reward_goal:
-            break
-        if 'error' in info[0]:
-            print("Test error:", info[0]['error'])
-            break
-
-    simplified = test_env.network.simplify()
-    passed = (simplified == target_gadget)
+    success_rate = successes / eval_episodes
     if verbose:
-        print(f"\nTest result for {title}:")
-        print(f"Final total reward: {total_reward}")
-        print("Proposed solution:", simplified)
-        print("Target gadget:", target_gadget)
-        print("✅ Passed" if passed else "❌ Failed")
-        if hasattr(test_env, "successful_operations"):
-            print("Operation sequence:")
-            for i, op in enumerate(test_env.successful_operations, 1):
-                print(f"Step {i}: {format_operation(op)}")
-    return passed
+        print(f"\nTest result for {title}: {success_rate:.2%} success over {eval_episodes} runs")
+
+    return model, success_rate >= 1.0
+
 
 ########################
 # Define your tests here
@@ -155,24 +161,34 @@ RL_TESTS = {
     "AP2T -> C2T": {
         "initial_gadgets": [AntiParallel2Toggle(), AntiParallel2Toggle()],
         "target_gadget": Crossing2Toggle(),
-        "ppo_params": {},
+        "dqn_params": {
+            "learning_rate": 0.0001,
+            "exploration_fraction": 0.4,  # More exploration for this complex transformation
+        },
     },
     "CL2T -> PL2T": {
         "initial_gadgets": [CrossingLocking2Toggle(), CrossingLocking2Toggle()],
         "target_gadget": ParallelLocking2Toggle(),
-        "ppo_params": {},
+        "dqn_params": {
+            "learning_rate": 0.0001,
+            "exploration_fraction": 0.4,
+        },
     },
     "Door -> SelfClosingDoor": {
         "initial_gadgets": [Door(), Door()],
         "target_gadget": SelfClosingDoor(),
-        "ppo_params": {},
+        "dqn_params": {
+            "learning_rate": 0.0001,
+            "exploration_fraction": 0.3,
+        },
     },
     "C2T -> Toggle2": {
         "initial_gadgets": [Crossing2Toggle(), Crossing2Toggle()],
         "target_gadget": Toggle2(),
-        "ppo_params": {"learning_rate": 0.1, "n_epochs": 20, "gamma": 0.94},
-        "max_episodes": 50,
-        "train_timesteps_per_ep": 1024,
+        "dqn_params": {
+            "learning_rate": 0.0001,
+            "exploration_fraction": 0.3,
+        },
     },
     # Add more tests here easily!
 }
@@ -183,12 +199,14 @@ def run_all_rl_tests(selected_tests=None, **override_params):
     for test_name, params in tests.items():
         print(f"\nRunning test: {test_name}")
         config = dict(
-            max_episodes=params.get("max_episodes", 100),
-            train_timesteps_per_ep=params.get("train_timesteps_per_ep", 512),
+            max_episodes=params.get("max_episodes", 1000),  # Increased default
+            train_timesteps_per_ep=params.get("train_timesteps_per_ep", 2048),  # Increased default
+            min_success_rate=0.1,  # New default
+            max_episodes_without_success=200,  # New default
         )
         config.update({k: v for k, v in params.items() if k not in {"initial_gadgets", "target_gadget"}})
         config.update(override_params)  # For user override
-        passed = run_rl_simulation(
+        _, passed = run_rl_simulation(
             initial_gadgets=params["initial_gadgets"],
             target_gadget=params["target_gadget"],
             title=test_name,
@@ -202,6 +220,21 @@ def run_all_rl_tests(selected_tests=None, **override_params):
 
 if __name__ == "__main__":
     # Example usage: run_all_rl_tests()
-    run_all_rl_tests()
-    # Example: run a single test with custom PPO params
-    # run_all_rl_tests(["AP2T -> C2T"], ppo_params={"learning_rate": 0.005, "ent_coef": 0.5}, max_episodes=30)
+    #run_all_rl_tests()
+    
+    expert_demo = [
+    ("COMBINE", 0, 1, 1, 0),
+    ("CONNECT", 0, 1, 2),
+    ("CONNECT", 0, 2, 5),
+    ("STOP",)
+    ]
+
+    model, rate = run_rl_simulation(
+        initial_gadgets=[AntiParallel2Toggle(), AntiParallel2Toggle()],
+        target_gadget=Crossing2Toggle(),
+        title="AP2T -> C2T",
+        seed_trajectories=[expert_demo],
+        total_timesteps=5000,
+        eval_episodes=50,
+    )
+

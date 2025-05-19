@@ -35,9 +35,13 @@ def format_operation(op: Tuple) -> str:
     if op[0] == "COMBINE":
         _, g1_idx, g2_idx, rotation, splice_idx = op
         return f"Combine gadget {g1_idx} with gadget {g2_idx} (rotation: {rotation}, splice at: {splice_idx})"
-    else:  # CONNECT
+    elif op[0] == "CONNECT":
         _, gadget_idx, loc1, loc2 = op
         return f"Connect locations {loc1} and {loc2} in gadget {gadget_idx}"
+    elif op[0] == "STOP":
+        return f"Stopped."
+    else:
+        return f"Unknown operation: {op}"
 
 def get_possible_operations(network: GadgetNetwork) -> List[Tuple]:
     """Get all valid operations for the current network."""
@@ -56,6 +60,8 @@ def get_possible_operations(network: GadgetNetwork) -> List[Tuple]:
         locs = gadget.getLocations()
         for loc1, loc2 in permutations(locs, 2):
             operations.append(("CONNECT", i, loc1, loc2))
+
+    operations.append(("STOP", ))
     
     return operations
 
@@ -98,7 +104,7 @@ def apply_operation(network: GadgetNetwork, operation: Tuple) -> Optional[Gadget
                                     if i not in (g1_idx, g2_idx)]
             new_network.subgadgets.append(combined)
             
-        else:  # CONNECT
+        elif operation[0] == "CONNECT":
             _, gadget_idx, loc1, loc2 = operation
             if gadget_idx >= len(network.subgadgets):
                 return None
@@ -113,6 +119,8 @@ def apply_operation(network: GadgetNetwork, operation: Tuple) -> Optional[Gadget
             error_msg = validate_gadget(gadget, operation)
             if error_msg:
                 return None
+        elif operation[0] == "STOP":
+            return new_network
             
         return new_network
     except (ValueError, IndexError) as e:
