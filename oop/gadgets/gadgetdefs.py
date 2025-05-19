@@ -91,8 +91,8 @@ class Crossing2Toggle(Gadget):
         locations = [0, 1, 2, 3]
         states = [0, 1]
         transitions = {
-            0: [(0, 2, 1), (3, 1, 1)],
-            1: [(2, 0, 0), (1, 3, 0)]
+            0: [(0, 2, 1), (1, 3, 1)],
+            1: [(2, 0, 0), (3, 1, 0)]
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -122,9 +122,9 @@ class CrossingLocking2Toggle(Gadget):
         states = [0, 1, 2]
         name = "CL2T"
         transitions = {
-            0: [(0, 2, 1), (3, 1, 2)],
+            0: [(0, 2, 1), (1, 3, 2)],
             1: [(2, 0, 0)],
-            2: [(1, 3, 0)]
+            2: [(3, 1, 0)]
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)

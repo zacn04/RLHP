@@ -7,16 +7,16 @@ from oop.gadgets.gadgetdefs import AntiParallel2Toggle, Crossing2Toggle
 from oop.gadgets.gadgetlike import GadgetNetwork
 
 
-def test_ap2t_sim_c2t():
+def test_c2t_sim_ap2t():
     net = GadgetNetwork()
     
-    # Add the first AP2T
-    ap2t1 = AntiParallel2Toggle()
-    net += ap2t1
+    # Add the first C2T
+    c2t1 = Crossing2Toggle()
+    net += c2t1
     
-    ap2t2 = AntiParallel2Toggle()
-    ap2t2.setCurrentState(1)
-    net += ap2t2
+    c2t2 = Crossing2Toggle()
+    c2t2.setCurrentState(1)
+    net += c2t2
     
     
     net.do_combine(0, 1, rotation=0, splice=1)
@@ -24,17 +24,17 @@ def test_ap2t_sim_c2t():
     
     # Now connect.
     gadget = net.subgadgets[-1]
-    net.do_connect(gadget, 1, 5)
-    net.do_connect(gadget, 6, 2)
+    net.do_connect(gadget, 6, 5)
+    net.do_connect(gadget, 1, 2)
     
     
     res = net.simplify()
     
     net2 = GadgetNetwork()
-    net2 += Crossing2Toggle()
+    net2 += AntiParallel2Toggle()
     res2 = net2.simplify()
     print(res, res2)
     
     assert(res == res2)
 
-test_ap2t_sim_c2t()
+test_c2t_sim_ap2t()
