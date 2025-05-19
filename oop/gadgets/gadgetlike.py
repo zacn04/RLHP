@@ -93,6 +93,8 @@ class Gadget(GadgetLike):
         min2 = hp.list_hopcroft_minimisation(*dfa2)
         norm1 = hp.list_normalisation(min1)
         norm2 = hp.list_normalisation(min2)
+        print("norm1", norm1)
+        print("norm2", norm2)
         return self._are_dfas_isomorphic(norm1, norm2)
 
     def _get_reachable_gadget(self):
@@ -119,8 +121,51 @@ class Gadget(GadgetLike):
         (states2, locs2, t2, _, a2) = dfa2
         if len(states1) != len(states2) or len(locs1) != len(locs2) or set(a1) != set(a2):
             return False
-        loc_map = {l: l for l in locs1}  # identity mapping
-        return self._check_transition_equivalence(states1, t1, t2, loc_map)
+        
+        # For a square with 4 locations, we need to check all symmetries
+        if len(locs1) == 4:
+            # Define all symmetries of the square
+            # Assuming locations are ordered as: [top, right, bottom, left]
+            symmetries = [
+                # Identity
+                lambda x: x,
+                # 90° rotation
+                lambda x: [x[3], x[0], x[1], x[2]],
+                # 180° rotation
+                lambda x: [x[2], x[3], x[0], x[1]],
+                # 270° rotation
+                lambda x: [x[1], x[2], x[3], x[0]],
+                # Horizontal reflection
+                lambda x: [x[2], x[1], x[0], x[3]],
+                # Vertical reflection
+                lambda x: [x[0], x[3], x[2], x[1]],
+                # Diagonal reflection (top-left to bottom-right)
+                lambda x: [x[0], x[1], x[2], x[3]],
+                # Anti-diagonal reflection (top-right to bottom-left)
+                lambda x: [x[0], x[3], x[2], x[1]]
+            ]
+            
+            # Try each symmetry
+            for sym in symmetries:
+                loc_map = {locs1[i]: sym(locs1)[i] for i in range(4)}
+                if self._check_transition_equivalence(states1, t1, t2, loc_map):
+                    return True
+                else:
+                    print('symmetry failed with loc_map', loc_map)
+        else:
+            # For non-square gadgets, just check identity and reverse
+            n = len(locs1)
+            # Identity mapping
+            loc_map = {l: l for l in locs1}
+            if self._check_transition_equivalence(states1, t1, t2, loc_map):
+                return True
+                
+            # Reflection mapping (reverse the locations)
+            loc_map = {locs1[i]: locs1[n-1-i] for i in range(n)}
+            if self._check_transition_equivalence(states1, t1, t2, loc_map):
+                return True
+                
+        return False
 
     def _check_transition_equivalence(self, states, t1, t2, loc_map):
         dict1 = {s: {(u,v):w for (u,v,w) in t1.get(s, [])} for s in states}

@@ -18,18 +18,6 @@ def test_trivial_equivalence():
 
     assert gadget1 == gadget2 
 
-    '''def test_square_gadgets():
-        # for each individiual gadget type, we check pairwise equivalence
-        gadget_types = [
-            ParallelLocking2Toggle(), Door(), SelfClosingDoor(), Toggle2(),
-            AntiParallel2Toggle(), Crossing2Toggle(), AntiParallelLocking2Toggle(), CrossingLocking2Toggle()
-        ]
-        for gadget1 in gadget_types:
-            for gadget2 in gadget_types:
-                if gadget1.name == gadget2.name:
-                    continue
-                assert not gadget1 == gadget2, f"{gadget1.name} should not be equal to {gadget2.name}"
-    '''
 
 def test_trivial_simulation():
     
@@ -43,8 +31,28 @@ def test_trivial_simulation():
     assert res != Toggle2()
     assert res != ParallelLocking2Toggle()
 
+def test_reflection_of_c2t():
+
+    net = GadgetNetwork()
+    rotated_c2t = Gadget(
+        name = "Rotated C2T",
+        locations=[0,1,2,3],
+        states=[0,1],
+        transitions={
+            0: [(0, 2, 1), (3, 1, 1)],
+            1: [(2, 0, 0), (1, 3, 0)]
+        },
+        current_state = 0
+    )
+    net += rotated_c2t
+
+    res = net.simplify()
+
+    assert res == Crossing2Toggle()
+
 
 
 if __name__ == "__main__":
     test_trivial_equivalence()
     test_trivial_simulation()
+    test_reflection_of_c2t()
