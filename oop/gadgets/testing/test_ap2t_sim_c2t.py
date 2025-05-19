@@ -18,16 +18,14 @@ def test_ap2t_sim_c2t():
     ap2t2.setCurrentState(1)
     net += ap2t2
     
-    print("Initial network:")
-    print(net)
-    
     # Use do_combine instead of combine to get the actual gadget
     net.do_combine(0, 1, rotation=0, splice=1)
    
     
-    # Now connect, 
-    net.connect(-1, 1, 5)
-    net.connect(-1, 2, 6)
+    # Now connect.
+    gadget = net.subgadgets[-1]
+    net.do_connect(gadget, 1, 5)
+    net.do_connect(gadget, 6, 2)
     
     
     res = net.simplify()

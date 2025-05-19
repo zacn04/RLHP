@@ -13,11 +13,12 @@ def test_cl2t_sim_pl2t():
     
     # Use do_combine and add the result to the network
     combined = net.do_combine(0, 1, rotation=0, splice=1)
-    net += combined  # Add the combined gadget to the network
+    
+    gadget = net.subgadgets[-1]
     
     # Connect using the index of the combined gadget (which is 2)
-    net.connect(-1, 6, 5)
-    net.connect(-1, 1, 2)
+    net.do_connect(gadget, 6, 5)
+    net.do_connect(gadget, 1, 2)
     
     res = net.simplify()
     
