@@ -1,5 +1,6 @@
 EXPERT_SOLUTIONS = {
     "AP2T_to_C2T": [[
+        ("SET_STATE", 1, 1),
         ("COMBINE", 0, 1, 0, 1),
         ("CONNECT", 0, 1, 5),
         ("CONNECT", 0, 6, 2),
@@ -7,6 +8,7 @@ EXPERT_SOLUTIONS = {
     ]],
     
     "C2T_to_AP2T": [[
+        ("SET_STATE", 1, 1),
         ("COMBINE", 0, 1, 0, 1),
         ("CONNECT", 0, 6, 5),
         ("CONNECT", 0, 1, 2),

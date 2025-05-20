@@ -1,94 +1,137 @@
+#!/usr/bin/env python3
 import os
 import sys
+import logging
+from datetime import datetime
+# add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from copy import deepcopy
-import numpy as np
-import matplotlib.pyplot as plt
-from stable_baselines3 import DQN
+from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from oop.gadgets.gadgetdefs import *
-from oop.gadgets.gadgetlike import GadgetNetwork
-from env import GadgetSimulationEnv  
-from expert import EXPERT_SOLUTIONS
+import matplotlib.pyplot as plt
+import torch
+
+import gymnasium as gym
+from gymnasium import spaces
+
+from oop.gadgets.gadgetdefs import AntiParallel2Toggle, Crossing2Toggle
+from env import GadgetSimulationEnv
+
+from stable_baselines3.common.base_class import BaseAlgorithm
+from sb3_contrib.common.wrappers import ActionMasker
 
 
+def mask_fn(env):
+    return env._build_action_mask()
 
-def seed_replay_buffer(model, trajs, env):
-    # Reset env so obs shapes line up
-    obs = env.reset()
-    for demo in trajs:
-        env.network = GadgetNetwork()
-        for g in deepcopy(env.initial_gadgets):
-            env.network += g
-        for op in demo:
-            # turn (COMBINE/CONNECT/STOP) into action idx
-            action = env.action_from_op(op)
-            next_obs, reward, done, info = env.step(action)
-            model.replay_buffer.add(
-                obs, next_obs, np.array([action]), [reward], [done], [info]
-            )
-            obs = next_obs
-            if done:
-                break
-
-if __name__ == "__main__":
-    # 2) Create the vectorized env
-    raw_env = GadgetSimulationEnv(
-        initial_gadgets=[AntiParallel2Toggle(), AntiParallel2Toggle()],
-        target_gadget=Crossing2Toggle(),
-        max_steps=8
+def main():
+    # Set up logging
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"training_{timestamp}.log")
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
     )
-    env = DummyVecEnv([lambda: raw_env])
+    
+    logging.info("Starting training session")
+    
+    # 1) Create your environment
+    env = DummyVecEnv([
+    lambda: ActionMasker(
+        GadgetSimulationEnv(
+            initial_gadgets=[AntiParallel2Toggle(), AntiParallel2Toggle()],
+            target_gadget=Crossing2Toggle(),
+            max_steps=8,
+        ),
+        mask_fn
+    )
+    ])
 
-    # 3) Build the model
-    model = DQN(
+    # 2) Instantiate MaskablePPO
+    model = MaskablePPO(
         policy="MultiInputPolicy",
         env=env,
-        learning_rate=1e-4,
-        buffer_size=10_000,
-        learning_starts=0,      # we seed immediately
-        batch_size=32,
-        train_freq=4,
-        gradient_steps=1,
-        target_update_interval=500,
-        exploration_fraction=0.2,
-        exploration_initial_eps=1.0,
-        exploration_final_eps=0.05,
-        policy_kwargs=dict(net_arch=[64,64]),
+        learning_rate=1e-3,
+        n_steps=2048,
+        batch_size=256,
+        n_epochs=10,
+        gamma=0.95,
+        gae_lambda=0.95,
+        clip_range=0.1,
+        ent_coef=0.05,
+        policy_kwargs=dict(
+            net_arch=[256, 256],
+            activation_fn=torch.nn.ReLU,
+        ),
         verbose=1,
+        tensorboard_log="runs/mppo_ap2t_c2t",
     )
 
-    # 4) Seed the replay buffer with your expert demo
-    seed_replay_buffer(model, EXPERT_SOLUTIONS["AP2T_to_C2T"], raw_env)
-
-    # 5) Train
-    TIMESTEPS = 20_000
+    # 3) Train
+    TIMESTEPS = 500_000
+    logging.info(f"Starting training for {TIMESTEPS} timesteps")
     model.learn(total_timesteps=TIMESTEPS)
+    logging.info("Training completed")
 
-    # 6) Save
+    # 4) Save the model
     os.makedirs("models", exist_ok=True)
-    model.save("models/dqn_ap2t_to_c2t")
+    model_path = "models/mppo_ap2t_to_c2t"
+    model.save(model_path)
+    logging.info(f"Model saved to {model_path}")
 
-    # 7) Evaluate
+    # 5) Evaluate
     successes = 0
-    EPISODES = 100
     ep_rewards = []
-    for _ in range(EPISODES):
-        obs = raw_env.reset()
+    logging.info("Starting evaluation")
+    for ep in range(100):
+        eval_env = DummyVecEnv([
+            lambda: ActionMasker(
+                GadgetSimulationEnv(
+                    initial_gadgets=[AntiParallel2Toggle(), AntiParallel2Toggle()],
+                    target_gadget=Crossing2Toggle(),
+                    max_steps=8,
+                ),
+                mask_fn
+            )
+        ])
+        obs = eval_env.reset()
         done = False
-        total_reward = 0
+        total_r = 0
         while not done:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, info = raw_env.step(action)
-            total_reward += reward
-        if raw_env.network.simplify() == Crossing2Toggle():
+            action_mask = obs["action_mask"]
+            action, _ = model.predict(obs, deterministic=True, action_masks=action_mask)
+            obs, reward, done, _ = eval_env.step(action)
+            total_r += reward
+        ep_rewards.append(total_r)
+        net = eval_env.envs[0].env
+        if net.network.simplify() == Crossing2Toggle():
             successes += 1
-        ep_rewards.append(total_reward)
-    plt.figure()
-    plt.plot(ep_rewards)
-    plt.title("Rewards over Time")
+            logging.info(f"Episode {ep}: Success!")
+        else:
+            logging.info(f"Episode {ep}: Failed with reward {total_r}")
+
+    # 6) Plot episode rewards
+    plt.figure(figsize=(6, 4))
+    plt.plot(ep_rewards, marker='.', linestyle='-')
+    plt.title("Episode Rewards (MaskablePPO)")
     plt.xlabel("Episode")
     plt.ylabel("Total Reward")
+    plt.tight_layout()
+    plt.savefig(os.path.join(log_dir, f"rewards_{timestamp}.png"))
     plt.show()
-    print(f"Success rate: {successes/EPISODES:.2%}")
+
+    success_rate = successes/100
+    logging.info(f"✅ Success rate over 100 episodes: {success_rate:.2%}")
+    print(f"✅ Success rate over 100 episodes: {success_rate:.2%}")
+    logging.info(f"Log file saved to: {log_file}")
+
+if __name__ == "__main__":
+    main()

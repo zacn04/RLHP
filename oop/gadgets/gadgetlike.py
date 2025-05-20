@@ -93,8 +93,6 @@ class Gadget(GadgetLike):
         min2 = hp.list_hopcroft_minimisation(*dfa2)
         norm1 = hp.list_normalisation(min1)
         norm2 = hp.list_normalisation(min2)
-        print("norm1", norm1)
-        print("norm2", norm2)
         return self._are_dfas_isomorphic(norm1, norm2)
 
     def _get_reachable_gadget(self):
@@ -150,8 +148,6 @@ class Gadget(GadgetLike):
                 loc_map = {locs1[i]: sym(locs1)[i] for i in range(4)}
                 if self._check_transition_equivalence(states1, t1, t2, loc_map):
                     return True
-                else:
-                    print('symmetry failed with loc_map', loc_map)
         else:
             # For non-square gadgets, just check identity and reverse
             n = len(locs1)
