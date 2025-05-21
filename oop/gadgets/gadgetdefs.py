@@ -51,7 +51,7 @@ class SelfClosingDoor(Gadget):
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
 
-class Toggle2(Gadget):
+class Parallel2Toggle(Gadget):
     """
     Parallel 2 Toggle Gadget.
     """

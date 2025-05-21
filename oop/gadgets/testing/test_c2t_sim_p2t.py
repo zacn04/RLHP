@@ -3,7 +3,7 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 if project_root not in sys.path:
     sys.path.append(project_root)
-from oop.gadgets.gadgetdefs import Toggle2, Crossing2Toggle
+from oop.gadgets.gadgetdefs import Parallel2Toggle, Crossing2Toggle
 from oop.gadgets.gadgetlike import GadgetNetwork
 
 
@@ -30,7 +30,7 @@ def test_c2t_sim_p2t():
     res = net.simplify()
     
     net2 = GadgetNetwork()
-    net2 += Toggle2()
+    net2 += Parallel2Toggle()
     res2 = net2.simplify()
     
     assert(res == res2)

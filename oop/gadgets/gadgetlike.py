@@ -33,6 +33,7 @@ class Gadget(GadgetLike):
         self.states = list(states) if states is not None else []
         self.transitions = dict(transitions) if transitions is not None else {}
         self.current_state = current_state
+        self.free_ports = set(locations)
 
     def __str__(self):
         return f"{self.name}"
@@ -66,6 +67,10 @@ class Gadget(GadgetLike):
 
     def getTransitions(self):
         return dict(self.transitions)
+    
+    def removePorts(self, *ports):
+        for p in ports:
+            self.free_ports.discard(p)
 
     def __eq__(self, other):
         # Quick shape checks
@@ -80,14 +85,14 @@ class Gadget(GadgetLike):
             r1.getLocations(),
             r1.getTransitions(),
             r1.current_state,
-            r1.getStates()[1:]
+            [r1.current_state]
         )
         dfa2 = (
             r2.getStates(),
             r2.getLocations(),
             r2.getTransitions(),
             r2.current_state,
-            r2.getStates()[1:]
+            [r2.current_state]
         )
         min1 = hp.list_hopcroft_minimisation(*dfa1)
         min2 = hp.list_hopcroft_minimisation(*dfa2)
@@ -215,6 +220,8 @@ class GadgetNetwork(GadgetLike):
 
     def do_connect(self, gadget: Gadget, loc1, loc2):
         # Group transitions by locations
+        if loc1 not in gadget.free_ports or loc2 not in gadget.free_ports:
+            raise ValueError("Port already in use.")
         inbound1, outbound1, inbound2, outbound2 = {}, {}, {}, {}
         new_trans = {}
         for state, trans_list in gadget.transitions.items():
@@ -235,6 +242,7 @@ class GadgetNetwork(GadgetLike):
                     new_trans[st].append((li, lo, ns))
         gadget.transitions = new_trans
         gadget.locations = [l for l in gadget.locations if l not in (loc1, loc2)]
+        gadget.removePorts(loc1, loc2)
 
     def do_combine(self, i1, i2, rotation, splice):
         g1 = self.subgadgets[i1]

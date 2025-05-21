@@ -1,32 +1,36 @@
-import sys
-import os
+import sys, os, pytest
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
 from oop.gadgets.gadgetdefs import *
 from oop.gadgets.gadgetlike import *
 
-def test_failure():
+def test_invalid_combine_and_connect():
+    net = GadgetNetwork()
+    net += Parallel2Toggle()
 
-    gadget1 = Toggle2()
+    # 1) COMBINE on non-existent gadget → must raise
+    with pytest.raises(IndexError):
+        net.do_combine(0, 1, 0, 0)
 
-    gadget2 = Toggle2()
+    # 2) CONNECT re-using a port → must raise
+    g = net.subgadgets[0]
+    net.do_connect(g, 0, 1)
+    net.do_connect(g, 2, 3)           # legal first time
 
-    network = GadgetNetwork()
+    assert net.simplify() != Crossing2Toggle()
 
-    network += gadget1
-    try:
-        network.do_combine(0, 1, 0, 0) # should fail
-        assert False, "Expected IndexError due to invalid combine indices"
-    except IndexError:
-        print("caught expected IndexError.")
-    gadget = network.subgadgets[0]
-    network.do_connect(gadget, 0, 1)
-    network.do_connect(gadget, 2, 3) # should have no transitions
+    # 3) Cross-network duplicate connect
+    net2 = GadgetNetwork()
+    net2 += AntiParallel2Toggle()
+    net2 += AntiParallel2Toggle()
 
-    res = network.simplify()
-    assert isinstance(res, Gadget)
-    assert res != gadget2
+    net2.do_combine(0, 1, 3, 0)
+    g2 = net2.subgadgets[0]
+    net2.do_connect(g2, 2, 4)         # first connect
 
+    with pytest.raises(ValueError):
+        net2.do_connect(g2, 2, 4)     # duplicate
 
-if __name__ == "__main__":
-    test_failure()
+    # 4) Resulting gadget is not C2T
+    assert net2.simplify() != Crossing2Toggle()

@@ -1,0 +1,11 @@
+Timestamp: 20250521_171818
+Step: 80000
+Trajectory:
+  CONNECT(g0, loc2, loc1) → reward=5.7
+  COMBINE(g1, g0, rot=0, splice=1) → reward=-4.5
+  CONNECT(g0, loc3, loc0) → reward=0.0
+  CONNECT(g0, loc1, loc3) → reward=-50.0
+Final gadget: Combined(AP2T+AP2T)
+Target gadget: C2T
+Success rate: 0.00%
+Average reward: -48.8

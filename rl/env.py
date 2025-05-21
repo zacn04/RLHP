@@ -20,15 +20,16 @@ class GadgetSimulationEnv(gym.Env):
 
         self.network = None
         self.current_step = 0
+        self.illegal_actions = 0
 
         self.max_gadgets = 2
         self.base_ports = max(len(g.getLocations()) for g in self.initial_gadgets)
-        self.max_ports = self.max_gadgets * self.base_ports
+        self.max_ports = 8  # Maximum possible ports after combining two gadgets
         self.max_states = 4
 
         self.num_setstate_ops = self.max_gadgets * self.max_states
         self.num_combine_ops = self.max_gadgets * self.max_gadgets * 4 * self.base_ports #each gadget pair, rotation and splicing indices
-        self.num_connect_ops = self.max_gadgets * self.base_ports * self.base_ports # each gadget, each location #
+        self.num_connect_ops = self.max_gadgets * self.max_ports * self.max_ports # each gadget, each location #
         self.action_space = spaces.Discrete(self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops + 1) #add 1 for STOP!
 
         self.observation_space = spaces.Dict({
@@ -44,6 +45,7 @@ class GadgetSimulationEnv(gym.Env):
         for g in deepcopy(self.initial_gadgets):
             self.network += g
         self.current_step = 0
+        self.prev_similarity = 0.0
         return self._get_obs(), {}
     
 
@@ -53,10 +55,14 @@ class GadgetSimulationEnv(gym.Env):
         reward = 0
         info = {}
 
-        if action == self.action_space.n - 1:
+        if self.current_step % 1000 == 0 and self.current_step > 0:
+            print(f"[LOG] up to step {self.current_step}, illegal_actions={self.illegal_actions}")
+
+        if action == self.action_space.n - 1: # stop
             done = True
             simp = deepcopy(self.network).simplify()
-            reward = 200 if simp == self.target_gadget else -20
+            similarity = self.dfa_similarity(simp, self.target_gadget)
+            reward = 200 if simp == self.target_gadget else -25
             return self._get_obs(), reward, done, truncated, info
         else:
             try:
@@ -77,25 +83,31 @@ class GadgetSimulationEnv(gym.Env):
                         raise ValueError("Invalid COMBINE: same index")
                     if splice >= len(self.network.subgadgets[i].locations):
                         raise ValueError(f"Invalid COMBINE: splice index {splice} out of range")
+                    reward += 4
                         
                 elif action < self.num_combine_ops + self.num_connect_ops:
                     # Check connect validity
                     conn_idx = action - self.num_combine_ops
-                    gadget_idx = conn_idx // (self.base_ports * self.base_ports)
-                    rem = conn_idx % (self.base_ports * self.base_ports)
-                    loc1 = rem // self.base_ports
-                    loc2 = rem % self.base_ports
+                    gadget_idx = conn_idx // (self.max_ports * self.max_ports)
+                    rem = conn_idx % (self.max_ports * self.max_ports)
+                    loc1 = rem // self.max_ports
+                    loc2 = rem % self.max_ports
                     
                     if gadget_idx >= len(self.network.subgadgets):
                         raise ValueError("Invalid CONNECT: gadget index out of range")
                     
                     g = self.network.subgadgets[gadget_idx]
                     ports = g.getLocations()
+
+                    port1 = ports[loc1]
+                    port2 = ports[loc2]
                     
                     if loc1 >= len(ports) or loc2 >= len(ports):
                         raise ValueError(f"Invalid CONNECT: port indices {loc1},{loc2} out of range for ports {ports}")
                     if loc1 == loc2:
                         raise ValueError("Invalid CONNECT: cannot connect port to itself")
+                    if port1 not in g.free_ports or port2 not in g.free_ports:
+                        raise ValueError("Invalid CONNECT: port already used")
                         
                 elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops:
                     # Check set state validity
@@ -111,38 +123,54 @@ class GadgetSimulationEnv(gym.Env):
                         raise ValueError(f"Invalid SET_STATE: state {s} not in {g.getStates()}")
                     if s == g.getCurrentState():
                         raise ValueError(f"Invalid SET_STATE: already in state {s}")
-                
+                    reward += 5
                 # If we get here, the action is valid
                 self._apply_action(action)
-                reward -=1 # stop doing stuff bro
+                #reward -=1 # stop doing stuff bro
             except Exception as e:
+                self.illegal_actions +=1
                 info['error'] = str(e)
-                reward = -50  # Small penalty for invalid action
-                done = False # does not stop, just gets a penalty. 
+                print(f"[ILLEGAL] step={self.current_step}, action={action}, error={e}")
+                return self._get_obs(), -50, True, False, {
+                    **info, 
+                    "illegal_actions": self.illegal_actions
+                 } # ur done tbh
                 
         current = deepcopy(self.network).simplify()
-        if current == self.target_gadget: #actually stop ahhh
-            return self._get_obs(), 200, True, False, info 
         similarity = self.dfa_similarity(current, self.target_gadget)
-        reward += 10 * similarity  # Reward for getting closer to target
-        
+        delta = similarity - self.prev_similarity
+
+        if delta > 0:
+            reward += 10 * delta  # Reward for getting closer to target
+        '''if delta < 0: 
+            reward += 5 * delta'''
+        self.prev_similarity = similarity
+
         self.current_step += 1
         if self.current_step >= self.max_steps:
             truncated = True
             reward -= 1  # Small penalty for running out of steps
         
 
-        return self._get_obs(), reward, done, truncated, info
+        return self._get_obs(), reward, done, truncated, {
+            **info,
+            "illegal_actions": self.illegal_actions
+        }
     
     def dfa_similarity(self, g1, g2):
         """
         Return a [0,1] similarity score between the string forms of g1 and g2,
-        using the Ratcliff‐Obershelp “gestalt” algorithm from difflib.SequenceMatcher.
+        using the Ratcliff‐Obershelp "gestalt" algorithm from difflib.SequenceMatcher.
         """
-        s1, s2 = str(g1), str(g2)
+        def transition_string(g):
+            parts = []
+            for s, lst in sorted(g.getTransitions().items()):
+                for (u,v,w) in sorted(lst):
+                    parts.append(f"{s}->{u},{v}->{w}")
+            return "|".join(parts)
         # SequenceMatcher.ratio() returns 2*M / T, where M is number of matches
         # and T is total length of both strings.
-        return difflib.SequenceMatcher(None, s1, s2).ratio()
+        return difflib.SequenceMatcher(None, transition_string(g1), transition_string(g2)).ratio()
 
 
 
@@ -167,10 +195,10 @@ class GadgetSimulationEnv(gym.Env):
 
         elif action < self.num_combine_ops + self.num_connect_ops:  # CONNECT
             conn_idx = action - self.num_combine_ops
-            gadget_idx = conn_idx // (self.base_ports * self.base_ports)
-            rem = conn_idx % (self.base_ports * self.base_ports)
-            loc1 = rem // self.base_ports       # local index 0..max_ports-1
-            loc2 = rem % self.base_ports
+            gadget_idx = conn_idx // (self.max_ports * self.max_ports)
+            rem = conn_idx % (self.max_ports * self.max_ports)
+            loc1 = rem // self.max_ports       # local index 0..max_ports-1
+            loc2 = rem % self.max_ports
 
             g = self.network.subgadgets[gadget_idx]
             # Map local indices to global port labels:
@@ -247,6 +275,7 @@ class GadgetSimulationEnv(gym.Env):
         """
         Returns a (self.action_space.n,) int8 mask where
         mask[k] == 1 if action k is currently valid, else 0.
+        Ensures at least one action is valid at all times.
         """
         mask = np.zeros(self.action_space.n, dtype=np.int8)
         idx = 0
@@ -269,17 +298,27 @@ class GadgetSimulationEnv(gym.Env):
 
         # 2) CONNECT actions
         # flatten order: gadget g, loc1, loc2
+        # --- 2)  CONNECT(g, loc1, loc2)  (loc1,loc2 ordered) -------------
         for g_idx in range(self.max_gadgets):
-            ports = self.network.subgadgets[g_idx].getLocations() if g_idx < len(self.network.subgadgets) else []
-            for loc1 in range(self.base_ports):
+            gadget_exists   = g_idx < len(self.network.subgadgets)
+
+            for loc1 in range(self.base_ports):           # enumerate full lattice
                 for loc2 in range(self.base_ports):
-                    valid = (loc1 in range(len(ports)) 
-                            and loc2 in range(len(ports))
-                            and loc1 != loc2)
+                    # we advance idx **regardless** of validity so the mask
+                    # stays aligned with the policy’s action IDs
+                    valid = (
+                        gadget_exists
+                        and loc1 < self.base_ports
+                        and loc2 < self.base_ports
+                        and loc1 != loc2                          
+                        and loc1 in self.network.subgadgets[g_idx].free_ports
+                        and loc2 in self.network.subgadgets[g_idx].free_ports
+                    )
                     mask[idx] = 1 if valid else 0
                     idx += 1
 
 
+        # 3) SET_STATE actions
         for g_idx in range(self.max_gadgets):
             if g_idx < len(self.network.subgadgets):
                 states = self.network.subgadgets[g_idx].getStates()
@@ -291,14 +330,17 @@ class GadgetSimulationEnv(gym.Env):
                 mask[idx] = 1 if valid else 0
                 idx += 1
 
-        # 3) STOP action (last index)
-        # idx should now equal num_combine_ops + num_connect_ops
-        # STOP only valid when the reachable gadget matches target
+        # 4) STOP action (last index)
+        # STOP is valid when the reachable gadget matches target
         simp = deepcopy(self.network).simplify()
-        mask[-1] = 1 if simp == self.target_gadget else 0
-        if self.network.simplify() == self.target_gadget:
-             mask[:-1] = 0
-             mask[-1] = 1
+
+        # If we've reached the target, only allow STOP
+        if simp == self.target_gadget:
+            mask[:-1] = 0
+            mask[-1] = 1
+        # If no actions are valid, allow STOP as a fallback
+        elif not np.any(mask):
+            mask[-1] = 1
 
         return mask
 
@@ -334,7 +376,8 @@ class GadgetSimulationEnv(gym.Env):
         idx += 1
 
         # D) similarity scalar
-        sim = self.dfa_similarity(self.network.simplify(), self.target_gadget)
+        curr = self.network.simplify()
+        sim = self.dfa_similarity(curr, self.target_gadget)
         state_vec[idx] = sim
         idx += 1
 

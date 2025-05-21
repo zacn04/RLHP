@@ -6,9 +6,9 @@ from oop.gadgets.gadgetdefs import *
 
 def test_trivial_equivalence():
 
-    gadget1 = Toggle2()
+    gadget1 = Parallel2Toggle()
 
-    gadget2 = Toggle2()
+    gadget2 = Parallel2Toggle()
 
     # They should be the same regardless of state, we test both.
 
@@ -28,7 +28,7 @@ def test_trivial_simulation():
 
     res = net.simplify()
 
-    assert res != Toggle2()
+    assert res != Parallel2Toggle()
     assert res != ParallelLocking2Toggle()
 
 def test_reflection_of_c2t():

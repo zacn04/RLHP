@@ -1,0 +1,3 @@
+2025-05-21 15:10:33,573 | Starting run with args: Namespace(task='AP2T_to_C2T', timesteps=500000, eval_freq=10000, n_eval=10)
+2025-05-21 15:10:34,243 | Training for 500,000 timesteps…
+2025-05-21 15:13:41,182 | Model saved → models/mppo_AP2T_to_C2T_20250521_151033
