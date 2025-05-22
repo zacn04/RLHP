@@ -166,12 +166,21 @@ def decode_action(action, env):
         return f"COMBINE(g{i}, g{j}, rot={rot}, splice={splice})"
     elif action < env.num_combine_ops + env.num_connect_ops:
         # CONNECT action
+        
         conn_idx = action - env.num_combine_ops
-        gadget_idx = conn_idx // (env.max_ports * env.max_ports)
+        g_idx = conn_idx // (env.max_ports * env.max_ports)
         rem = conn_idx % (env.max_ports * env.max_ports)
         loc1 = rem // env.max_ports
         loc2 = rem % env.max_ports
-        return f"CONNECT(g{gadget_idx}, loc{loc1}, loc{loc2})"
+        if g_idx < len(env.network.subgadgets):
+            locs = env.network.subgadgets[g_idx].getLocations()
+            lbl = lambda k: locs[k] if k < len(locs) else "⟂"
+            lbl1, lbl2 = lbl(loc1), lbl(loc2)
+        else:
+            lbl1 = lbl2 = "⟂"
+
+        return (f"CONNECT(g{g_idx}, "
+                f"loc{loc1}→{lbl1}, loc{loc2}→{lbl2})")
     else:
         # SET_STATE action
         set_idx = action - env.num_combine_ops - env.num_connect_ops
@@ -277,13 +286,16 @@ class SuccessEvalCallback(BaseCallback):
                 decoded_action = decode_action(action, eval_env.env)
                 trajectory.append((decoded_action, float(reward)))
 
+            final_gadget = eval_env.env.network.simplify()
+            target_gadget = self.task_cfg.target_gadget
+
             # Store first episode's trajectory
             if ep == 0:
                 first_trajectory = trajectory
-                final_gadget = eval_env.env.network.simplify()
-                target_gadget = self.task_cfg.target_gadget
-
-            if eval_env.env.network.simplify() == self.task_cfg.target_gadget:
+            
+            if final_gadget == target_gadget:
+                print(final_gadget, final_gadget.locations, final_gadget.states, final_gadget.transitions)
+                print(target_gadget, target_gadget.locations, target_gadget.states, target_gadget.transitions)
                 successes += 1
             total_reward += ep_reward
 

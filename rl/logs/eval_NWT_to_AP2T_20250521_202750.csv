@@ -1,0 +1,3 @@
+step,success_rate,avg_reward,illegal_actions,illegal_action_rate,combine_rate,connect_rate,set_state_rate,stop_rate
+80000,1.0,206.12121212121207,252,0.0252,0.25,0.5,0.0,0.25
+160000,0.0,-38.54734092722919,282,0.0282,0.25,0.75,0.0,0.0

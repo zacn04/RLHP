@@ -4,7 +4,6 @@ import numpy as np
 from copy import deepcopy
 from oop.gadgets.gadgetlike import GadgetNetwork
 from oop.gadgets.gadgetlike import Gadget as g
-
 import logging
 import difflib
 
@@ -76,7 +75,6 @@ class GadgetSimulationEnv(gym.Env):
                     splice = rem % self.base_ports
                     i = ij // self.max_gadgets
                     j = ij % self.max_gadgets
-                    
                     if i >= len(self.network.subgadgets) or j >= len(self.network.subgadgets):
                         raise ValueError("Invalid COMBINE: index out of range")
                     if i == j:
@@ -107,7 +105,9 @@ class GadgetSimulationEnv(gym.Env):
                     if loc1 == loc2:
                         raise ValueError("Invalid CONNECT: cannot connect port to itself")
                     if port1 not in g.free_ports or port2 not in g.free_ports:
-                        raise ValueError("Invalid CONNECT: port already used")
+                        #cutting it off
+                        self.illegal_actions +=1
+                        return self._get_obs, -20.0, True, True,  {**info, "illegal_actions": self.illegal_actions}
                         
                 elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops:
                     # Check set state validity
@@ -130,7 +130,7 @@ class GadgetSimulationEnv(gym.Env):
             except Exception as e:
                 self.illegal_actions +=1
                 info['error'] = str(e)
-                print(f"[ILLEGAL] step={self.current_step}, action={action}, error={e}")
+                print(f"[ILLEGAL] step={self.current_step}, action={self.op_from_action(action)}, error={e}")
                 return self._get_obs(), -50, True, False, {
                     **info, 
                     "illegal_actions": self.illegal_actions
@@ -194,6 +194,7 @@ class GadgetSimulationEnv(gym.Env):
             self.network.do_combine(i, j, rotation=rot, splice=splice)
 
         elif action < self.num_combine_ops + self.num_connect_ops:  # CONNECT
+            
             conn_idx = action - self.num_combine_ops
             gadget_idx = conn_idx // (self.max_ports * self.max_ports)
             rem = conn_idx % (self.max_ports * self.max_ports)
@@ -210,6 +211,7 @@ class GadgetSimulationEnv(gym.Env):
                 raise ValueError(f"CONNECT: invalid local port {loc1},{loc2} for {ports}")
             if port1 == port2:
                 raise ValueError(f"CONNECT: cannot connect port to itself.")
+            #print("[DEBUG] about to CONNECT labels", port1, port2, " | free_ports =", g.free_ports)
             self.network.do_connect(g, port1, port2)
         elif action <  self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops:
             set_idx = action - self.num_combine_ops - self.num_connect_ops
@@ -239,27 +241,18 @@ class GadgetSimulationEnv(gym.Env):
             return idx
 
         elif op[0] == "CONNECT":
-            _, g_idx, glob1, glob2 = op
-            # pick gadget
-            if g_idx >= len(self.network.subgadgets):
-                raise ValueError(f"Invalid gadget index in op: {op}")
+            _, g_idx, port1, port2 = op
             g = self.network.subgadgets[g_idx]
-            # map global ports to local indices 0..3
             locs = g.getLocations()
+
             try:
-                loc1 = locs.index(glob1)
-                loc2 = locs.index(glob2)
-            except ValueError:
-                raise ValueError(f"Port {glob1} or {glob2} not found in {locs}")
-            # flatten
-            idx = self.num_combine_ops
-            for gg in range(self.max_gadgets):
-                for l1 in range(self.max_ports):
-                    for l2 in range(self.max_ports):
-                        if gg == g_idx and l1 == loc1 and l2 == loc2:
-                            return idx
-                        idx += 1
-            raise ValueError(f"Invalid CONNECT op after localizing: {op}")
+                loc1 = locs.index(port1)
+                loc2 = locs.index(port2)
+            except ValueError as e:
+                raise ValueError(f"Port(s) {port1} or {port2} not found in {locs}")
+
+            idx = self.num_combine_ops + g_idx * self.max_ports * self.max_ports + loc1 * self.max_ports + loc2
+            return idx
         elif op[0] == "SET_STATE":
             _, g_idx, s = op
             return self.num_combine_ops + self.num_connect_ops + g_idx * self.max_states + s
@@ -269,7 +262,45 @@ class GadgetSimulationEnv(gym.Env):
         else:
             raise ValueError(f"Unknown op: {op}")
 
-        
+    def op_from_action(env, action: int):
+        """
+        Reverse maps an action index back to its original operation tuple:
+        ("STOP",) or ("SET_STATE", g_idx, s) or ("CONNECT", g_idx, port1, port2) or ("COMBINE", i, j, rot, splice)
+        """
+        if action == env.action_space.n - 1:
+            return ("STOP",)
+
+        elif action < env.num_combine_ops:
+            flat = action
+            ij = flat // (4 * env.base_ports)
+            rem = flat % (4 * env.base_ports)
+            rot = rem // env.base_ports
+            splice = rem % env.base_ports
+            i = ij // env.max_gadgets
+            j = ij % env.max_gadgets
+            return ("COMBINE", i, j, rot, splice)
+
+        elif action < env.num_combine_ops + env.num_connect_ops:
+            conn_idx = action - env.num_combine_ops
+            g_idx = conn_idx // (env.max_ports * env.max_ports)
+            rem = conn_idx % (env.max_ports * env.max_ports)
+            loc1 = rem // env.max_ports
+            loc2 = rem % env.max_ports
+            try:
+                port1 = env.network.subgadgets[g_idx].getLocations()[loc1]
+                port2 = env.network.subgadgets[g_idx].getLocations()[loc2]
+            except Exception:
+                port1, port2 = loc1, loc2  # fallback if out of range
+            return ("CONNECT", g_idx, port1, port2)
+
+        elif action < env.num_combine_ops + env.num_connect_ops + env.num_setstate_ops:
+            set_idx = action - env.num_combine_ops - env.num_connect_ops
+            g_idx = set_idx // env.max_states
+            s = set_idx % env.max_states
+            return ("SET_STATE", g_idx, s)
+
+        raise ValueError(f"Invalid action index {action} (max {env.action_space.n})")
+
 
     def _build_action_mask(self):
         """
@@ -384,4 +415,8 @@ class GadgetSimulationEnv(gym.Env):
         # (idx should now be ≤ 32; the rest stays zero)
         mask = self._build_action_mask()
         return {"state_vector": state_vec, "action_mask": mask}
+    
+    def local_to_label(self, g_idx: int, loc_idx: int) -> int:
+        """Return the physical port label for the current local index."""
+        return self.network.subgadgets[g_idx].getLocations()[loc_idx]
 
