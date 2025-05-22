@@ -106,8 +106,7 @@ class GadgetSimulationEnv(gym.Env):
                         raise ValueError("Invalid CONNECT: cannot connect port to itself")
                     if port1 not in g.free_ports or port2 not in g.free_ports:
                         #cutting it off
-                        self.illegal_actions +=1
-                        return self._get_obs, -20.0, True, True,  {**info, "illegal_actions": self.illegal_actions}
+                        raise ValueError("you just cant do this tbh")
                         
                 elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops:
                     # Check set state validity
@@ -125,13 +124,15 @@ class GadgetSimulationEnv(gym.Env):
                         raise ValueError(f"Invalid SET_STATE: already in state {s}")
                     reward += 5
                 # If we get here, the action is valid
+                decoded = self.op_from_action(action)
+                #print(f"[PRE-APPLY] step={self.current_step}, action={decoded}")
                 self._apply_action(action)
                 #reward -=1 # stop doing stuff bro
             except Exception as e:
                 self.illegal_actions +=1
                 info['error'] = str(e)
                 print(f"[ILLEGAL] step={self.current_step}, action={self.op_from_action(action)}, error={e}")
-                return self._get_obs(), -50, True, False, {
+                return self._get_obs(), -500, True, False, {
                     **info, 
                     "illegal_actions": self.illegal_actions
                  } # ur done tbh
@@ -331,22 +332,19 @@ class GadgetSimulationEnv(gym.Env):
         # flatten order: gadget g, loc1, loc2
         # --- 2)  CONNECT(g, loc1, loc2)  (loc1,loc2 ordered) -------------
         for g_idx in range(self.max_gadgets):
-            gadget_exists   = g_idx < len(self.network.subgadgets)
-
-            for loc1 in range(self.base_ports):           # enumerate full lattice
-                for loc2 in range(self.base_ports):
-                    # we advance idx **regardless** of validity so the mask
-                    # stays aligned with the policy’s action IDs
-                    valid = (
-                        gadget_exists
-                        and loc1 < self.base_ports
-                        and loc2 < self.base_ports
-                        and loc1 != loc2                          
-                        and loc1 in self.network.subgadgets[g_idx].free_ports
-                        and loc2 in self.network.subgadgets[g_idx].free_ports
-                    )
-                    mask[idx] = 1 if valid else 0
-                    idx += 1
+            if g_idx < len(self.network.subgadgets):
+                ports = self.network.subgadgets[g_idx].getLocations()
+                for i, port1 in enumerate(ports):
+                    for j, port2 in enumerate(ports):
+                        valid = (
+                            port1 != port2
+                            and port1 in self.network.subgadgets[g_idx].free_ports
+                            and port2 in self.network.subgadgets[g_idx].free_ports
+                        )
+                        mask[idx] = 1 if valid else 0
+                        idx += 1
+            else:
+                idx += self.max_ports * self.max_ports
 
 
         # 3) SET_STATE actions

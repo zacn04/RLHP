@@ -36,7 +36,17 @@ class Gadget(GadgetLike):
         self.free_ports = set(locations)
 
     def __str__(self):
-        return f"{self.name}"
+        lines = [
+            f"Gadget {self.name}:",
+            f"  Locations     : {self.getLocations()}",
+            f"  States        : {self.getStates()}",
+            f"  Current state : {self.getCurrentState()}",
+            f"  Transitions   :"
+        ]
+        for state, trans_list in self.getTransitions().items():
+            for inp, outp, nxt in trans_list:
+                lines.append(f"    {state} --({inp}→{outp})-> {nxt}")
+        return "\n".join(lines)
 
     def traverse(self, in_location, out_location):
         state_transitions = self.transitions.get(self.current_state, [])

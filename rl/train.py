@@ -38,7 +38,7 @@ from sb3_contrib.common.maskable.policies import MaskableMultiInputActorCriticPo
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT)
 
-from env import GadgetSimulationEnv  
+from rl.env import GadgetSimulationEnv  
 from oop.gadgets.gadgetdefs import * 
 from oop.gadgets.gadgetlike import GadgetLike 
 
@@ -120,7 +120,7 @@ def mask_fn(env):
     return mask
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Factory helpers – single task or random multi-task
+# Factory helpers – single task or multi-task
 # ────────────────────────────────────────────────────────────────────────────────
 def make_env(task_cfg: TaskConfig):
     def _make():
@@ -133,16 +133,65 @@ def make_env(task_cfg: TaskConfig):
     return _make
 
 
+class MultiTaskEnv(gym.Env):
+    def __init__(self, task_names: List[str]):
+        super().__init__()
+        self.task_names = task_names
+        self.current_task_idx = 0
+        self.env = None
+        self.illegal_actions = 0  # Initialize illegal_actions counter
+        self._create_env()
+        
+        # Set observation and action spaces from the underlying env
+        self.observation_space = self.env.observation_space
+        self.action_space = self.env.action_space
+    
+    def _create_env(self):
+        task = self.task_names[self.current_task_idx]
+        cfg = TASK_CONFIGS[task]
+        self.env = ActionMasker(
+            GadgetSimulationEnv(
+                initial_gadgets=cfg.initial_gadgets,
+                target_gadget=cfg.target_gadget,
+                max_steps=cfg.max_steps,
+            ),
+            mask_fn
+        )
+        # Reset illegal_actions when creating new env
+        self.illegal_actions = 0
+    
+    def reset(self, *, seed=None, options=None):
+        obs, info = self.env.reset(seed=seed, options=options)
+        return obs, info
+    
+    def step(self, action):
+        obs, reward, done, truncated, info = self.env.step(action)
+        # Update illegal_actions from underlying env
+        self.illegal_actions = self.env.env.illegal_actions  # Access through ActionMasker to base env
+        if done or truncated:
+            # Move to next task
+            self.current_task_idx = (self.current_task_idx + 1) % len(self.task_names)
+            self._create_env()
+        return obs, reward, done, truncated, info
+    
+    def get_attr(self, attr):
+        if attr == 'illegal_actions':
+            return self.illegal_actions
+        return getattr(self.env, attr)
+        
+    # Add action masking support
+    def action_masks(self):
+        """Return the action mask for the current state."""
+        return self.env.action_masks()
+        
+    def _build_action_mask(self):
+        """Build the action mask for the current state."""
+        return self.env._build_action_mask()
+
+
 def make_multitask_env(task_names: List[str]):
     def _make():
-        task = random.choice(task_names)
-        cfg = TASK_CONFIGS[task]
-        env = GadgetSimulationEnv(
-            initial_gadgets=cfg.initial_gadgets,
-            target_gadget=cfg.target_gadget,
-            max_steps=cfg.max_steps,
-        )
-        return ActionMasker(env, mask_fn)
+        return MultiTaskEnv(task_names)
     return _make
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -274,6 +323,8 @@ class SuccessEvalCallback(BaseCallback):
                 action, _ = self.model.predict(obs,
                                             deterministic=True,
                                             action_masks=mask)
+                decoded_action = decode_action(action, eval_env.env)
+                trajectory.append((decoded_action,))
                 obs, reward, done, truncated, _ = eval_env.step(action)
                 obs = unwrap_obs(obs)
                 ep_reward += float(reward)                # ← cast to float
@@ -283,8 +334,7 @@ class SuccessEvalCallback(BaseCallback):
                 eval_action_counts[action_type] += 1
                 
                 # Decode the action and store in trajectory
-                decoded_action = decode_action(action, eval_env.env)
-                trajectory.append((decoded_action, float(reward)))
+                trajectory[-1] = ((decoded_action, float(reward)))
 
             final_gadget = eval_env.env.network.simplify()
             target_gadget = self.task_cfg.target_gadget
@@ -396,7 +446,8 @@ def main():
     if args.task == "multi":
         task_names = list(TASK_CONFIGS.keys())
         train_env = DummyVecEnv([make_multitask_env(task_names) for _ in range(8)])
-        eval_task = TASK_CONFIGS["AP2T_to_C2T"]
+        # For evaluation, we'll evaluate on all tasks
+        eval_task = TASK_CONFIGS["AP2T_to_C2T"]  # Default eval task
     else:
         eval_task = TASK_CONFIGS[args.task]
         train_env = DummyVecEnv([make_env(eval_task) for _ in range(8)])
@@ -421,13 +472,13 @@ def main():
         gamma=0.99,
         gae_lambda=0.98,
         clip_range=0.2,
-        ent_coef=0.01,
+        ent_coef=0.1,
         policy_kwargs=dict(
             net_arch=[256, 256], 
             activation_fn=torch.nn.ReLU, 
             ),
         verbose=1,
-        tensorboard_log=os.path.join("runs", f"mppo_{args.task}_{timestamp}"),
+        tensorboard_log=os.path.join("runs", f"mppo_{args.task}_latest"),
     )
 
    
@@ -438,95 +489,9 @@ def main():
 
     # Save model
     os.makedirs("models", exist_ok=True)
-    model_path = os.path.join("models", f"mppo_{args.task}_{timestamp}")
+    model_path = os.path.join("models", f"mppo_{args.task}_latest")
     model.save(model_path)
     logging.info("Model saved → %s", model_path)
-
-    '''# Post-training evaluation (100 eps)
-    successes, total_rewards = 0, []
-    eval_env = DummyVecEnv([make_env(eval_task)])
-
-    for ep in range(100):
-        obs, _ = eval_env.reset()                        # ← unpack reset()
-        obs = unwrap_obs(obs)
-        done, truncated = False, False
-        ep_reward = 0.0
-        trajectory = []
-
-        while not (done or truncated):
-            # Get the action mask from the underlying environment
-            inner = eval_env.envs[0]  # Get the ActionMasker
-            raw_env = getattr(inner, "env", inner)  # Get the underlying env
-            mask = raw_env._build_action_mask()
-            
-            # Ensure observation is in the correct format with proper shapes
-            obs = unwrap_obs(obs)
-            if isinstance(obs, dict):
-                state_vector = obs["state_vector"]
-                if len(state_vector.shape) == 0:  # Handle scalar case
-                    state_vector = np.array([state_vector], dtype=np.float32)
-                elif len(state_vector.shape) == 1:  # Already correct shape
-                    state_vector = state_vector.astype(np.float32)
-                obs = {
-                    "state_vector": state_vector,
-                    "action_mask": mask
-                }
-            else:
-                # Handle non-dict case
-                if len(obs.shape) == 0:  # Handle scalar case
-                    obs = np.array([obs], dtype=np.float32)
-                elif len(obs.shape) == 1:  # Already correct shape
-                    obs = obs.astype(np.float32)
-                obs = {
-                    "state_vector": obs,
-                    "action_mask": mask
-                }
-                
-            action, _ = model.predict(obs,
-                                    deterministic=True,
-                                    action_masks=mask)
-            obs, reward, done, truncated, _ = eval_env.step(action)
-            obs = unwrap_obs(obs)
-            ep_reward += float(reward)                   # ← cast to float
-            
-            # Decode the action for better readability
-            decoded_action = decode_action(action, raw_env)
-            trajectory.append((decoded_action, float(reward)))
-
-        print(f"[Eval Trajectory] Reward: {ep_reward:.1f}")
-        print("Actions:")
-        for action, reward in trajectory:
-            print(f"  {action} → reward={reward:.1f}")
-        inner = eval_env.envs[0]
-        raw_env = getattr(inner, "env", inner)
-        final = raw_env.network.simplify()
-        print("Final gadget:", final)
-        print("Target gadget:", eval_task.target_gadget)
-        if final == eval_task.target_gadget:
-            successes += 1
-
-        total_rewards.append(ep_reward)
-
-    success_rate = successes / 100
-    avg_reward   = sum(total_rewards) / 100
-
-    logging.info("Final success rate: %.2f%%", success_rate * 100)
-    logging.info("Final average reward: %.1f", avg_reward)
-
-
-    # Reward curve plot
-    plt.figure(figsize=(6, 4))
-    plt.plot(total_rewards, marker=".")
-    plt.title(f"Episode Rewards – {args.task}")
-    plt.xlabel("Episode")
-    plt.ylabel("Total Reward")
-    plt.tight_layout()
-    fig_path = os.path.join(log_dir, f"rewards_{args.task}_{timestamp}.png")
-    plt.savefig(fig_path)
-    logging.info("Reward plot saved → %s", fig_path)
-
-    print(f"✅ Success rate: {success_rate * 100:.2f}% (100 episodes)")
-    logging.info("Run complete. CSV logged at %s", csv_path)'''
 
 
 if __name__ == "__main__":

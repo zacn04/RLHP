@@ -37,15 +37,22 @@ def evaluate_task(model, task_config, num_episodes=5):
         while not done:
             mask = obs["action_mask"]
             action, _ = model.predict(obs, deterministic=True, action_masks=mask)
+            decoded = decode_action(action, env.env)
             obs, reward, done, _, _ = env.step(action)
             episode_reward += reward
-            actions.append(decode_action(action, env.env))
+            actions.append(decoded)
             
-            if done and reward > 0:
+            if done and reward >= 200:
                 success_count += 1
                 
+
+        final_env = env.env
+        final_gadget = final_env.network.simplify()
         total_rewards.append(episode_reward)
-        episode_actions.append(actions)
+        episode_actions.append({
+            'actions': actions,
+            'final_gadget': final_gadget
+        })
     
     return {
         'task_name': task_config.name,
@@ -56,7 +63,7 @@ def evaluate_task(model, task_config, num_episodes=5):
     }
 
 def main():
-    model_path = "models/mppo_NWT_to_AP2T_20250521_200610"   
+    model_path = "models/mppo_multi_20250521_220959"   
     model = MaskablePPO.load(model_path)
     
     print("\nEvaluating model across all tasks:")
@@ -72,8 +79,9 @@ def main():
         print(f"Success rate: {result['success_rate']:.2%}")
         print(f"Individual rewards: {[f'{r:.2f}' for r in result['rewards']]}")
         print("\nAction sequences:")
-        for i, actions in enumerate(result['episode_actions']):
-            print(f"Episode {i+1}: {' -> '.join(actions)}")
+        for i, info in enumerate(result['episode_actions']):
+            print(f"Episode {i+1}: {' -> '.join(info['actions'])}")
+            print(f"  Final gadget: {info['final_gadget']}")
     
     print("\nSummary:")
     print("-" * 50)
