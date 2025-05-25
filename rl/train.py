@@ -215,7 +215,6 @@ def decode_action(action, env):
         return f"COMBINE(g{i}, g{j}, rot={rot}, splice={splice})"
     elif action < env.num_combine_ops + env.num_connect_ops:
         # CONNECT action
-        
         conn_idx = action - env.num_combine_ops
         g_idx = conn_idx // (env.max_ports * env.max_ports)
         rem = conn_idx % (env.max_ports * env.max_ports)
@@ -223,13 +222,12 @@ def decode_action(action, env):
         loc2 = rem % env.max_ports
         if g_idx < len(env.network.subgadgets):
             locs = env.network.subgadgets[g_idx].getLocations()
-            lbl = lambda k: locs[k] if k < len(locs) else "⟂"
-            lbl1, lbl2 = lbl(loc1), lbl(loc2)
+            lbl1 = locs[loc1] if loc1 < len(locs) else "⟂"
+            lbl2 = locs[loc2] if loc2 < len(locs) else "⟂"
         else:
             lbl1 = lbl2 = "⟂"
 
-        return (f"CONNECT(g{g_idx}, "
-                f"loc{loc1}→{lbl1}, loc{loc2}→{lbl2})")
+        return (f"CONNECT(g{g_idx}, {lbl1}, {lbl2})")
     else:
         # SET_STATE action
         set_idx = action - env.num_combine_ops - env.num_connect_ops
@@ -478,7 +476,7 @@ def main():
             activation_fn=torch.nn.ReLU, 
             ),
         verbose=1,
-        tensorboard_log=os.path.join("runs", f"mppo_{args.task}_latest"),
+        tensorboard_log=os.path.join("runs", f"mppo_{args.task}_latest2"),
     )
 
    
@@ -489,7 +487,7 @@ def main():
 
     # Save model
     os.makedirs("models", exist_ok=True)
-    model_path = os.path.join("models", f"mppo_{args.task}_latest")
+    model_path = os.path.join("models", f"mppo_{args.task}_latest2")
     model.save(model_path)
     logging.info("Model saved → %s", model_path)
 
