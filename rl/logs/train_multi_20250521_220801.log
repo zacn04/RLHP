@@ -1,0 +1,2 @@
+2025-05-21 22:08:01,185 | Starting run with args: Namespace(task='multi', timesteps=500000, eval_freq=10000, n_eval=10)
+2025-05-21 22:08:01,726 | Training for 500,000 timesteps…

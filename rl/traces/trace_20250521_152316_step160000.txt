@@ -1,0 +1,15 @@
+Timestamp: 20250521_152316
+Step: 160000
+Trajectory:
+  CONNECT(g0, loc1, loc0) → reward=5.7
+  CONNECT(g0, loc1, loc0) → reward=0.0
+  CONNECT(g1, loc1, loc0) → reward=0.0
+  CONNECT(g1, loc1, loc0) → reward=0.0
+  SET_STATE(g0, s=1) → reward=0.0
+  SET_STATE(g1, s=1) → reward=0.0
+  SET_STATE(g1, s=0) → reward=0.0
+  SET_STATE(g1, s=1) → reward=-1.0
+Final gadget: AP2T
+Target gadget: C2T
+Success rate: 0.00%
+Average reward: 4.7

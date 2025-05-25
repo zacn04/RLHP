@@ -12,7 +12,7 @@ class ParallelLocking2Toggle(Gadget):
     def __init__(self):
         locations = [0, 1, 2, 3]
         states = [0, 1, 2]
-        name = "Locking 2 Toggle"
+        name = "PL2T"
         transitions = {
             0: [(0, 1, 1), (3, 2, 2)],
             1: [(1, 0, 0)],
@@ -28,7 +28,7 @@ class Door(Gadget):
     def __init__(self):
         locations = [0, 1, 2, 3]
         states = [0, 1]
-        name = "Door"
+        name = "D"
         transitions = {
             0: [(0, 1, 1)],
             1: [(2, 3, 0), (1, 0, 1), (0, 1, 1)]  # traversing an open door stays open, can still close it.
@@ -43,7 +43,7 @@ class SelfClosingDoor(Gadget):
     def __init__(self):
         locations = [0, 1, 2, 3]
         states = [0, 1]  # State 0 is closed. State 1 is open.
-        name = "Self Closing Door"
+        name = "SCD"
         transitions = {
             0: [(0, 1, 1)],
             1: [(2, 3, 0), (1, 0, 0)]  # traversing an open door closes it
@@ -51,7 +51,7 @@ class SelfClosingDoor(Gadget):
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
 
-class Toggle2(Gadget):
+class Parallel2Toggle(Gadget):
     """
     Parallel 2 Toggle Gadget.
     """
@@ -59,7 +59,7 @@ class Toggle2(Gadget):
     def __init__(self):
         locations = [0, 1, 2, 3]
         states = [0, 1]
-        name = "2 Toggle"
+        name = "P2T"
         transitions = {
             0: [(0, 1, 1), (3, 2, 1)],
             1: [(1, 0, 0), (2, 3, 0)],
@@ -74,7 +74,7 @@ class AntiParallel2Toggle(Gadget):
     def __init__(self):
         locations = [0, 1, 2, 3]
         states = [0, 1]
-        name = "AntiParallel 2 Toggle"
+        name = "AP2T"
         transitions = {
             0: [(0, 1, 1), (2, 3, 1)],
             1: [(1, 0, 0), (3, 2, 0)]
@@ -87,12 +87,12 @@ class Crossing2Toggle(Gadget):
     Crossing 2 Toggle Gadget.
     """
     def __init__(self):
-        name = "Crossing2Toggle"
+        name = "C2T"
         locations = [0, 1, 2, 3]
         states = [0, 1]
         transitions = {
-            0: [(0, 2, 1), (3, 1, 1)],
-            1: [(2, 0, 0), (1, 3, 0)]
+            0: [(0, 2, 1), (1, 3, 1)],
+            1: [(2, 0, 0), (3, 1, 0)]
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
@@ -122,11 +122,55 @@ class CrossingLocking2Toggle(Gadget):
         states = [0, 1, 2]
         name = "CL2T"
         transitions = {
-            0: [(0, 2, 1), (3, 1, 2)],
+            0: [(0, 2, 1), (1, 3, 2)],
             1: [(2, 0, 0)],
-            2: [(1, 3, 0)]
+            2: [(3, 1, 0)]
         }
         current_state = 0
         super().__init__(name, locations, states, transitions, current_state)
 
 
+class NoncrossingWireLock(Gadget):
+    """
+    Noncrossing Wire Lock Gadget.
+    """
+    def __init__(self):
+        locations = [0,1,2,3]
+        states = [0,1]
+        name = "NWL"
+        transitions = {
+            0: [(3,2,1), (2,3,1)],
+            1: [(1,0,1), (0,1,1), (3,2,0), (2,3,0)]
+        }
+        current_state = 0
+        super().__init__(name, locations, states, transitions, current_state)
+
+class NoncrossingToggleLock(Gadget):
+    """
+    Noncrossing Toggle Lock Gadget.
+    """
+    def __init__(self):
+        locations = [0,1,2,3]
+        states = [0,1]
+        name = "NTL"
+        transitions = {
+            0 : [(3,2,1)],
+            1 : [(0,1,1), (1,0,1), (2,3,0)]
+        }
+        current_state=0
+        super().__init__(name, locations, states, transitions, current_state)
+
+class NoncrossingWireToggle(Gadget):
+    """
+    Noncrossing Wire Toggle Gadget.
+    """
+    def __init__(self):
+        locations = [0,1,2,3]
+        states = [0,1]
+        name = "NWT"
+        transitions = {
+            0 : [(0,1,1), (1,0,1), (3,2,1)], #closed R->L
+            1 : [(2,3,0), (0,1,0), (1,0,0)] #open L->R
+        }
+        current_state=0
+        super().__init__(name, locations, states, transitions, current_state)

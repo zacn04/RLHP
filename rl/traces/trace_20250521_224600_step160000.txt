@@ -1,0 +1,35 @@
+Timestamp: 20250521_224600
+Step: 160000
+Trajectory:
+  COMBINE(g0, g1, rot=0, splice=3) → reward=5.4
+  CONNECT(g0, loc3→3, loc2→2) → reward=0.5
+  CONNECT(g0, loc3→5, loc1→1) → reward=2.2
+  STOP → reward=200.0
+Final gadget: Gadget Combined(C2T+C2T):
+  Locations     : [0, np.int64(4), np.int64(6), np.int64(7)]
+  States        : [(0, 0), (0, 1), (1, 0), (1, 1)]
+  Current state : 0
+  Transitions   :
+    (0, 0) --(4→6)-> (0, 1)
+    (0, 0) --(0→7)-> (0, 1)
+    (0, 1) --(6→4)-> (0, 0)
+    (0, 1) --(7→0)-> (0, 0)
+    (1, 0) --(4→6)-> (1, 1)
+    (1, 1) --(6→4)-> (1, 0)
+Target gadget: Gadget P2T:
+  Locations     : [0, 1, 2, 3]
+  States        : [0, 1]
+  Current state : 0
+  Transitions   :
+    0 --(0→1)-> 1
+    0 --(3→2)-> 1
+    1 --(1→0)-> 0
+    1 --(2→3)-> 0
+Success rate: 100.00%
+Average reward: 208.1
+Illegal actions (last 10,000 steps): 325 (3.25%)
+Action proportions:
+  COMBINE: 25.00%
+  CONNECT: 50.00%
+  SET_STATE: 0.00%
+  STOP: 25.00%

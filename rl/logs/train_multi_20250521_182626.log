@@ -1,0 +1,3 @@
+2025-05-21 18:26:26,754 | Starting run with args: Namespace(task='multi', timesteps=500000, eval_freq=10000, n_eval=10)
+2025-05-21 18:26:27,282 | Training for 500,000 timesteps…
+2025-05-21 18:33:09,729 | Model saved → models/mppo_multi_20250521_182626

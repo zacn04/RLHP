@@ -1,0 +1,5 @@
+2025-05-19 21:23:57,770 - Starting training session
+2025-05-19 21:23:58,401 - Starting training for 500000 timesteps
+2025-05-19 21:27:07,799 - Training completed
+2025-05-19 21:27:07,827 - Model saved to models/mppo_ap2t_to_c2t
+2025-05-19 21:27:07,827 - Starting evaluation
