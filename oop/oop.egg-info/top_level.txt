@@ -1,4 +1,0 @@
-dfa
-gadgets
-objective
-synthetic
