@@ -429,6 +429,14 @@ def main():
     parser.add_argument("--n_eval", type=int, default=10)
     args = parser.parse_args()
 
+    # Clean models directory
+    models_dir = "models"
+    if os.path.exists(models_dir):
+        for file in os.listdir(models_dir):
+            if file.startswith("mppo_"):
+                os.remove(os.path.join(models_dir, file))
+    os.makedirs(models_dir, exist_ok=True)
+
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -440,17 +448,14 @@ def main():
     )
     logging.info("Starting run with args: %s", args)
 
-    # build train & eval envs
-    if args.task == "multi":
-        task_names = list(TASK_CONFIGS.keys())
-        train_env = DummyVecEnv([make_multitask_env(task_names) for _ in range(8)])
-        # For evaluation, we'll evaluate on all tasks
-        eval_task = TASK_CONFIGS["AP2T_to_C2T"]  # Default eval task
-    else:
-        eval_task = TASK_CONFIGS[args.task]
-        train_env = DummyVecEnv([make_env(eval_task) for _ in range(8)])
-
-    eval_env_fn = make_env(eval_task)  # This returns a function that creates an env
+    # Always use multi-task environment for training
+    task_names = list(TASK_CONFIGS.keys())
+    train_env = DummyVecEnv([make_multitask_env(task_names) for _ in range(8)])
+    
+    # For evaluation, we'll evaluate on the specified task
+    eval_task = TASK_CONFIGS[args.task]
+    eval_env_fn = make_env(eval_task)
+    
     csv_path = os.path.join(log_dir, f"eval_{args.task}_{timestamp}.csv")
     eval_cb = SuccessEvalCallback(
         eval_env_fn=eval_env_fn,
@@ -476,18 +481,14 @@ def main():
             activation_fn=torch.nn.ReLU, 
             ),
         verbose=1,
-        tensorboard_log=os.path.join("runs", f"mppo_{args.task}_latest2"),
+        tensorboard_log=os.path.join("runs", f"mppo_multi_{timestamp}"),
     )
-
-   
-
 
     logging.info("Training for %s timesteps…", f"{args.timesteps:,}")
     model.learn(total_timesteps=args.timesteps, callback=eval_cb)
 
     # Save model
-    os.makedirs("models", exist_ok=True)
-    model_path = os.path.join("models", f"mppo_{args.task}_latest2")
+    model_path = os.path.join(models_dir, f"mppo_multi_{timestamp}")
     model.save(model_path)
     logging.info("Model saved → %s", model_path)
 
