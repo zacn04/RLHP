@@ -17,6 +17,12 @@ def test_c2t_sim_p2t():
     c2t2 = Crossing2Toggle()
     net += c2t2
     
+<<<<<<< HEAD
+=======
+    # Use the combine operation and ADD the result to the network
+    combined = net.do_combine(0, 1, rotation=0, splicing_index=0, reflect=False)
+    net += combined  # Add the combined gadget to the network
+>>>>>>> main
     
     net.do_combine(0, 1, rotation=0, splice=2)
    

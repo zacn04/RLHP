@@ -39,9 +39,11 @@
         "tuple": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "*.tcc": "cpp"
     },
     "python.analysis.extraPaths": [
         "./oop/gadgets"
-    ]
+    ],
+    "cmake.sourceDirectory": "/Users/zacnwo/RLHP/jeffrey/motion-planning-gadget-search"
 }
