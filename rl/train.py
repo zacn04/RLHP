@@ -122,24 +122,26 @@ def mask_fn(env):
 # ────────────────────────────────────────────────────────────────────────────────
 # Factory helpers – single task or multi-task
 # ────────────────────────────────────────────────────────────────────────────────
-def make_env(task_cfg: TaskConfig):
+def make_env(task_cfg: TaskConfig, freq_weighted: bool = False):
     def _make():
         env = GadgetSimulationEnv(
             initial_gadgets=task_cfg.initial_gadgets,
             target_gadget=task_cfg.target_gadget,
             max_steps=task_cfg.max_steps,
+            freq_weighted_rewards=freq_weighted,
         )
         return ActionMasker(env, mask_fn)
     return _make
 
 
 class MultiTaskEnv(gym.Env):
-    def __init__(self, task_names: List[str]):
+    def __init__(self, task_names: List[str], freq_weighted: bool = False):
         super().__init__()
         self.task_names = task_names
         self.current_task_idx = 0
         self.env = None
         self.illegal_actions = 0  # Initialize illegal_actions counter
+        self.freq_weighted = freq_weighted
         self._create_env()
         
         # Set observation and action spaces from the underlying env
@@ -154,6 +156,7 @@ class MultiTaskEnv(gym.Env):
                 initial_gadgets=cfg.initial_gadgets,
                 target_gadget=cfg.target_gadget,
                 max_steps=cfg.max_steps,
+                freq_weighted_rewards=self.freq_weighted,
             ),
             mask_fn
         )
@@ -189,9 +192,9 @@ class MultiTaskEnv(gym.Env):
         return self.env._build_action_mask()
 
 
-def make_multitask_env(task_names: List[str]):
+def make_multitask_env(task_names: List[str], freq_weighted: bool = False):
     def _make():
-        return MultiTaskEnv(task_names)
+        return MultiTaskEnv(task_names, freq_weighted)
     return _make
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -427,6 +430,8 @@ def main():
     parser.add_argument("--timesteps", type=int, default=500_000)
     parser.add_argument("--eval_freq", type=int, default=10_000)
     parser.add_argument("--n_eval", type=int, default=10)
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--freq_weighted", action="store_true", help="Use frequency-weighted rewards")
     args = parser.parse_args()
 
     # Clean models directory
@@ -450,11 +455,11 @@ def main():
 
     # Always use multi-task environment for training
     task_names = list(TASK_CONFIGS.keys())
-    train_env = DummyVecEnv([make_multitask_env(task_names) for _ in range(8)])
+    train_env = DummyVecEnv([make_multitask_env(task_names, args.freq_weighted) for _ in range(8)])
     
     # For evaluation, we'll evaluate on the specified task
     eval_task = TASK_CONFIGS[args.task]
-    eval_env_fn = make_env(eval_task)
+    eval_env_fn = make_env(eval_task, args.freq_weighted)
     
     csv_path = os.path.join(log_dir, f"eval_{args.task}_{timestamp}.csv")
     eval_cb = SuccessEvalCallback(
@@ -468,7 +473,7 @@ def main():
     model = MaskablePPO(
         policy=RenormalizingMaskableMultiInputActorCriticPolicy,
         env=train_env,
-        learning_rate=1e-3,
+        learning_rate=args.lr,
         n_steps=256,
         batch_size=128,
         n_epochs=10,
