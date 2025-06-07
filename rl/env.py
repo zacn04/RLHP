@@ -10,16 +10,24 @@ import difflib
 
 class GadgetSimulationEnv(gym.Env):
     metadata = {"render_modes": []}
-    def __init__(self, initial_gadgets, target_gadget, max_steps=8):
+    def __init__(self, initial_gadgets, target_gadget, max_steps=8, freq_weighted_rewards=False):
         super().__init__()
 
         self.initial_gadgets = initial_gadgets
         self.target_gadget = target_gadget
         self.max_steps = max_steps
+        self.freq_weighted_rewards = freq_weighted_rewards
 
         self.network = None
         self.current_step = 0
         self.illegal_actions = 0
+        self.action_counts = {
+            'COMBINE': 0,
+            'CONNECT': 0,
+            'SET_STATE': 0,
+            'DELETE': 0,
+            'STOP': 0,
+        }
 
         self.max_gadgets = 2
         self.base_ports = max(len(g.getLocations()) for g in self.initial_gadgets)
@@ -29,7 +37,14 @@ class GadgetSimulationEnv(gym.Env):
         self.num_setstate_ops = self.max_gadgets * self.max_states
         self.num_combine_ops = self.max_gadgets * self.max_gadgets * 4 * self.base_ports #each gadget pair, rotation and splicing indices
         self.num_connect_ops = self.max_gadgets * self.max_ports * self.max_ports # each gadget, each location #
-        self.action_space = spaces.Discrete(self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops + 1) #add 1 for STOP!
+        self.num_delete_ops = self.max_gadgets * self.max_ports
+        self.action_space = spaces.Discrete(
+            self.num_combine_ops
+            + self.num_connect_ops
+            + self.num_setstate_ops
+            + self.num_delete_ops
+            + 1
+        )  # add 1 for STOP!
 
         self.observation_space = spaces.Dict({
             'state_vector': spaces.Box(low=0, high=1, shape=(32,), dtype=np.float32),
@@ -45,6 +60,7 @@ class GadgetSimulationEnv(gym.Env):
             self.network += g
         self.current_step = 0
         self.prev_similarity = 0.0
+        self.action_counts = {k: 0 for k in self.action_counts}
         return self._get_obs(), {}
     
 
@@ -62,6 +78,7 @@ class GadgetSimulationEnv(gym.Env):
             simp = deepcopy(self.network).simplify()
             similarity = self.dfa_similarity(simp, self.target_gadget)
             reward = 200 if simp == self.target_gadget else -25
+            self.action_counts['STOP'] += 1
             return self._get_obs(), reward, done, truncated, info
         else:
             try:
@@ -81,8 +98,12 @@ class GadgetSimulationEnv(gym.Env):
                         raise ValueError("Invalid COMBINE: same index")
                     if splice >= len(self.network.subgadgets[i].locations):
                         raise ValueError(f"Invalid COMBINE: splice index {splice} out of range")
-                    reward += 4
-                        
+                    weight = 1
+                    if self.freq_weighted_rewards:
+                        weight = 1.0 / (self.action_counts['COMBINE'] + 1)
+                    reward += 4 * weight
+                    self.action_counts['COMBINE'] += 1
+
                 elif action < self.num_combine_ops + self.num_connect_ops:
                     # Check connect validity
                     conn_idx = action - self.num_combine_ops
@@ -105,9 +126,13 @@ class GadgetSimulationEnv(gym.Env):
                     if loc1 == loc2:
                         raise ValueError("Invalid CONNECT: cannot connect port to itself")
                     if port1 not in g.free_ports or port2 not in g.free_ports:
-                        #cutting it off
                         raise ValueError("you just cant do this tbh")
-                        
+                    weight = 1
+                    if self.freq_weighted_rewards:
+                        weight = 1.0 / (self.action_counts['CONNECT'] + 1)
+                    reward += 3 * weight
+                    self.action_counts['CONNECT'] += 1
+
                 elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops:
                     # Check set state validity
                     set_idx = action - self.num_combine_ops - self.num_connect_ops
@@ -122,7 +147,25 @@ class GadgetSimulationEnv(gym.Env):
                         raise ValueError(f"Invalid SET_STATE: state {s} not in {g.getStates()}")
                     if s == g.getCurrentState():
                         raise ValueError(f"Invalid SET_STATE: already in state {s}")
-                    reward += 5
+                    weight = 1
+                    if self.freq_weighted_rewards:
+                        weight = 1.0 / (self.action_counts['SET_STATE'] + 1)
+                    reward += 5 * weight
+                    self.action_counts['SET_STATE'] += 1
+                elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops + self.num_delete_ops:
+                    del_idx = action - self.num_combine_ops - self.num_connect_ops - self.num_setstate_ops
+                    g_idx = del_idx // self.max_ports
+                    loc = del_idx % self.max_ports
+                    if g_idx >= len(self.network.subgadgets):
+                        raise ValueError("Invalid DELETE: gadget index out of range")
+                    g = self.network.subgadgets[g_idx]
+                    if loc >= len(g.getLocations()):
+                        raise ValueError("Invalid DELETE: location index out of range")
+                    weight = 1
+                    if self.freq_weighted_rewards:
+                        weight = 1.0 / (self.action_counts['DELETE'] + 1)
+                    reward += 2 * weight
+                    self.action_counts['DELETE'] += 1
                 # If we get here, the action is valid
                 decoded = self.op_from_action(action)
                 #print(f"[PRE-APPLY] step={self.current_step}, action={decoded}")
@@ -226,6 +269,13 @@ class GadgetSimulationEnv(gym.Env):
             if s == g.getCurrentState():
                 raise ValueError(f"Cannot change to same state {s}")
             g.setCurrentState(s)
+        elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops + self.num_delete_ops:
+            del_idx = action - self.num_combine_ops - self.num_connect_ops - self.num_setstate_ops
+            g_idx = del_idx // self.max_ports
+            loc = del_idx % self.max_ports
+            g = self.network.subgadgets[g_idx]
+            port_label = g.getLocations()[loc]
+            self.network.do_delete_location(g, port_label)
         else:
             # STOP
             pass
@@ -257,6 +307,15 @@ class GadgetSimulationEnv(gym.Env):
         elif op[0] == "SET_STATE":
             _, g_idx, s = op
             return self.num_combine_ops + self.num_connect_ops + g_idx * self.max_states + s
+        elif op[0] == "DELETE":
+            _, g_idx, loc = op
+            return (
+                self.num_combine_ops
+                + self.num_connect_ops
+                + self.num_setstate_ops
+                + g_idx * self.max_ports
+                + loc
+            )
         elif op[0] == "STOP":
             return self.action_space.n - 1
 
@@ -299,6 +358,12 @@ class GadgetSimulationEnv(gym.Env):
             g_idx = set_idx // env.max_states
             s = set_idx % env.max_states
             return ("SET_STATE", g_idx, s)
+
+        elif action < env.num_combine_ops + env.num_connect_ops + env.num_setstate_ops + env.num_delete_ops:
+            del_idx = action - env.num_combine_ops - env.num_connect_ops - env.num_setstate_ops
+            g_idx = del_idx // env.max_ports
+            loc = del_idx % env.max_ports
+            return ("DELETE", g_idx, loc)
 
         raise ValueError(f"Invalid action index {action} (max {env.action_space.n})")
 
@@ -359,7 +424,18 @@ class GadgetSimulationEnv(gym.Env):
                 mask[idx] = 1 if valid else 0
                 idx += 1
 
-        # 4) STOP action (last index)
+        # 4) DELETE actions
+        for g_idx in range(self.max_gadgets):
+            if g_idx < len(self.network.subgadgets):
+                ports = self.network.subgadgets[g_idx].getLocations()
+            else:
+                ports = []
+            for loc in range(self.max_ports):
+                valid = loc < len(ports)
+                mask[idx] = 1 if valid else 0
+                idx += 1
+
+        # 5) STOP action (last index)
         # STOP is valid when the reachable gadget matches target
         simp = deepcopy(self.network).simplify()
 

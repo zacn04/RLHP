@@ -288,3 +288,19 @@ class GadgetNetwork(GadgetLike):
        # assert len(self.subgadgets)==1, "Expected single composite"
        # just returns the last one
         return self.subgadgets[-1]
+
+    def do_delete_location(self, gadget: Gadget, loc: int):
+        """Delete a location from a gadget by removing all transitions
+        referencing it and dropping the label from the gadget."""
+        new_trans = {}
+        for state, trans_list in gadget.transitions.items():
+            new_trans[state] = [
+                (li, lo, ns)
+                for li, lo, ns in trans_list
+                if li != loc and lo != loc
+            ]
+        gadget.transitions = new_trans
+        if loc in gadget.locations:
+            gadget.locations.remove(loc)
+        gadget.removePorts(loc)
+        return gadget
