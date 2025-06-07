@@ -1,5 +1,6 @@
 import sys
 import os
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 if project_root not in sys.path:
     sys.path.append(project_root)
@@ -17,13 +18,6 @@ def test_c2t_sim_p2t():
     c2t2 = Crossing2Toggle()
     net += c2t2
     
-<<<<<<< HEAD
-=======
-    # Use the combine operation and ADD the result to the network
-    combined = net.do_combine(0, 1, rotation=0, splicing_index=0, reflect=False)
-    net += combined  # Add the combined gadget to the network
->>>>>>> main
-    
     net.do_combine(0, 1, rotation=0, splice=2)
    
     
@@ -34,11 +28,11 @@ def test_c2t_sim_p2t():
     
     
     res = net.simplify()
-    
+
     net2 = GadgetNetwork()
     net2 += Parallel2Toggle()
     res2 = net2.simplify()
-    
-    assert(res == res2)
+
+    assert res == res2
 
 test_c2t_sim_p2t()
