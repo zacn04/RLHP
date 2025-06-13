@@ -34,6 +34,7 @@ class Gadget(GadgetLike):
         self.transitions = dict(transitions) if transitions is not None else {}
         self.current_state = current_state
         self.free_ports = set(locations)
+        self.connections  = []
 
     def __str__(self):
         lines = [
@@ -220,6 +221,7 @@ class GadgetNetwork(GadgetLike):
     def __iadd__(self, other: GadgetLike):
         self.subgadgets.append(other)
         return self
+    
 
     def connect(self, gadget_index, loc1, loc2):
         gadget = self.subgadgets[gadget_index]
@@ -253,6 +255,7 @@ class GadgetNetwork(GadgetLike):
         gadget.transitions = new_trans
         gadget.locations = [l for l in gadget.locations if l not in (loc1, loc2)]
         gadget.removePorts(loc1, loc2)
+        gadget.connections.append((loc1, loc2))
 
     def do_combine(self, i1, i2, rotation, splice):
         g1 = self.subgadgets[i1]
@@ -279,6 +282,15 @@ class GadgetNetwork(GadgetLike):
             transitions=new_trans,
             current_state=(g1.current_state,g2.current_state)
         )
+        for (u,v) in g1.connections:
+            new_u = u if u <= splice else u + len(g2.locations)
+            new_v = v if v <= splice else v + len(g2.locations)
+            new_g.connections.append((new_u, new_v))
+        mod = len(g2.locations)
+        for (u,v) in g2.connections:
+            new_u = ((u + rotation) % mod) + splice + 1
+            new_v = ((v + rotation) % mod) + splice + 1
+            new_g.connections.append((new_u, new_v))
         # retire inputs
         for idx in sorted([i1,i2], reverse=True): del self.subgadgets[idx]
         self.subgadgets.append(new_g)
@@ -304,3 +316,23 @@ class GadgetNetwork(GadgetLike):
             gadget.locations.remove(loc)
         gadget.removePorts(loc)
         return gadget
+
+# Helper functions for edge crossing detection
+
+def in_interval(x, a, b, order):
+        """Return True iff x lies strictly between a and b along the cyclic list `order`."""
+        ia, ib, ix = order.index(a), order.index(b), order.index(x)
+        # no wrap
+        if ia < ib:
+            return ia < ix < ib
+        # wrap-around
+        return ix > ia or ix < ib
+
+def would_cross(existing_edges, new_edge, order):
+    """True if new_edge crosses any edge in existing_edges on boundary order."""
+    a1, b1 = new_edge
+    for a2, b2 in existing_edges:
+        # XOR: one endpoint inside (a2,b2) and the other outside
+        if in_interval(a1, a2, b2, order) ^ in_interval(b1, a2, b2, order):
+            return True
+    return False

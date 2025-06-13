@@ -63,7 +63,7 @@ def evaluate_task(model, task_config, num_episodes=5):
     }
 
 def main():
-    model_path = "models/mppo_multi_20250524_234323"   
+    model_path = "models/mppo_multi_20250610_210322"   
     model = MaskablePPO.load(model_path)
     
     print("\nEvaluating model across all tasks:")

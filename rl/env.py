@@ -2,7 +2,7 @@ import gymnasium as gym
 from gymnasium import Env, spaces
 import numpy as np
 from copy import deepcopy
-from oop.gadgets.gadgetlike import GadgetNetwork
+from oop.gadgets.gadgetlike import GadgetNetwork, would_cross
 from oop.gadgets.gadgetlike import Gadget as g
 import logging
 import difflib
@@ -398,13 +398,19 @@ class GadgetSimulationEnv(gym.Env):
         # --- 2)  CONNECT(g, loc1, loc2)  (loc1,loc2 ordered) -------------
         for g_idx in range(self.max_gadgets):
             if g_idx < len(self.network.subgadgets):
-                ports = self.network.subgadgets[g_idx].getLocations()
-                for i, port1 in enumerate(ports):
-                    for j, port2 in enumerate(ports):
+                g       = self.network.subgadgets[g_idx]
+                ports   = g.getLocations()          # MUST be in CW order
+                free    = g.free_ports
+                existing= g.connections             # list of (u,v)
+
+                for p1 in ports:
+                    for p2 in ports:
+                        if p1 == p2:
+                            continue
                         valid = (
-                            port1 != port2
-                            and port1 in self.network.subgadgets[g_idx].free_ports
-                            and port2 in self.network.subgadgets[g_idx].free_ports
+                            p1 in free and
+                            p2 in free and
+                            not would_cross(existing, (p1, p2), ports)
                         )
                         mask[idx] = 1 if valid else 0
                         idx += 1

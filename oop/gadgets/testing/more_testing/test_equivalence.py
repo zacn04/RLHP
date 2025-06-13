@@ -50,9 +50,22 @@ def test_reflection_of_c2t():
 
     assert res == Crossing2Toggle()
 
+def test_should_not_be_equivalent():
+    net = GadgetNetwork()
+    net += Parallel2Toggle()
+    
+    net2 = GadgetNetwork()
+    net2 += AntiParallel2Toggle()
+
+    res1 = net.simplify()
+    res2 = net2.simplify()
+    assert res1 != res2
+
 
 
 if __name__ == "__main__":
     test_trivial_equivalence()
     test_trivial_simulation()
     test_reflection_of_c2t()
+    test_should_not_be_equivalent()
+    print("All tests passed.")

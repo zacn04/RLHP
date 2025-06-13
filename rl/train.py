@@ -231,6 +231,14 @@ def decode_action(action, env):
             lbl1 = lbl2 = "⟂"
 
         return (f"CONNECT(g{g_idx}, {lbl1}, {lbl2})")
+    elif action < self.num_combine_ops + self.num_connect_ops + self.num_setstate_ops + self.num_delete_ops:
+        # DELETE action
+        del_idx = action - self.num_combine_ops - self.num_connect_ops - self.num_setstate_ops
+        g_idx = del_idx // self.max_ports
+        loc = del_idx % self.max_ports
+        g = self.network.subgadgets[g_idx]
+        port_label = g.getLocations()[loc]
+        return f"DELETE(loc {port_label} of g{g_idx}, )"
     else:
         # SET_STATE action
         set_idx = action - env.num_combine_ops - env.num_connect_ops
@@ -259,7 +267,8 @@ class SuccessEvalCallback(BaseCallback):
             'COMBINE': 0,
             'CONNECT': 0,
             'SET_STATE': 0,
-            'STOP': 0
+            'STOP': 0,
+            'DELETE': 0,
         }
         # Create traces directory if it doesn't exist
         os.makedirs("traces", exist_ok=True)
@@ -278,6 +287,8 @@ class SuccessEvalCallback(BaseCallback):
             return "COMBINE"
         elif action < env.num_combine_ops + env.num_connect_ops:
             return "CONNECT"
+        elif action < env.num_combine_ops + env.num_connect_ops + env.delete_ops:
+            return "DELETE"
         else:
             return "SET_STATE"
 
@@ -486,14 +497,14 @@ def main():
             activation_fn=torch.nn.ReLU, 
             ),
         verbose=1,
-        tensorboard_log=os.path.join("runs", f"mppo_multi_{timestamp}"),
+        tensorboard_log=os.path.join("runs", f"mppo_{args.task}_latest"),
     )
 
     logging.info("Training for %s timesteps…", f"{args.timesteps:,}")
     model.learn(total_timesteps=args.timesteps, callback=eval_cb)
 
     # Save model
-    model_path = os.path.join(models_dir, f"mppo_multi_{timestamp}")
+    model_path = os.path.join(models_dir, f"mppo_{args.task}_latest")
     model.save(model_path)
     logging.info("Model saved → %s", model_path)
 
