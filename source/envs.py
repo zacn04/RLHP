@@ -6,6 +6,7 @@ from typing import Callable, List
 import gymnasium as gym
 import numpy as np
 from stable_baselines3.common.wrappers import ActionMasker
+import random
 
 from rl.env import GadgetSimulationEnv
 from .tasks import TaskConfig, TASK_CONFIGS
@@ -72,6 +73,56 @@ class MultiTaskEnv(gym.Env):
         return self.env._build_action_mask()  # type: ignore
 
 
+class RandomMultiTaskEnv(gym.Env):
+    """Select a random task each episode."""
+
+    def __init__(self, task_names: List[str], freq_weighted: bool = False) -> None:
+        super().__init__()
+        self.task_names = task_names
+        self.env: gym.Env | None = None
+        self.illegal_actions = 0
+        self.freq_weighted = freq_weighted
+        self._create_env()
+
+        self.observation_space = self.env.observation_space  # type: ignore
+        self.action_space = self.env.action_space  # type: ignore
+
+    def _create_env(self) -> None:
+        task = random.choice(self.task_names)
+        cfg = TASK_CONFIGS[task]
+        self.env = ActionMasker(
+            GadgetSimulationEnv(
+                initial_gadgets=cfg.initial_gadgets,
+                target_gadget=cfg.target_gadget,
+                max_steps=cfg.max_steps,
+                freq_weighted_rewards=self.freq_weighted,
+            ),
+            mask_fn,
+        )
+        self.illegal_actions = 0
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        obs, info = self.env.reset(seed=seed, options=options)  # type: ignore
+        return obs, info
+
+    def step(self, action):
+        obs, reward, done, truncated, info = self.env.step(action)  # type: ignore
+        self.illegal_actions = self.env.env.illegal_actions  # type: ignore
+        if done or truncated:
+            self._create_env()
+        return obs, reward, done, truncated, info
+
+    def get_attr(self, attr):
+        if attr == "illegal_actions":
+            return self.illegal_actions
+        return getattr(self.env, attr)
+
+    def action_masks(self) -> np.ndarray:
+        return self.env.action_masks()  # type: ignore
+
+    def _build_action_mask(self) -> np.ndarray:
+        return self.env._build_action_mask()  # type: ignore
+
 def make_env(task_cfg: TaskConfig, freq_weighted: bool = False) -> Callable[[], gym.Env]:
     def _make() -> gym.Env:
         env = GadgetSimulationEnv(
@@ -88,6 +139,13 @@ def make_env(task_cfg: TaskConfig, freq_weighted: bool = False) -> Callable[[], 
 def make_multitask_env(task_names: List[str], freq_weighted: bool = False) -> Callable[[], gym.Env]:
     def _make() -> gym.Env:
         return MultiTaskEnv(task_names, freq_weighted)
+
+    return _make
+
+
+def make_random_multitask_env(task_names: List[str], freq_weighted: bool = False) -> Callable[[], gym.Env]:
+    def _make() -> gym.Env:
+        return RandomMultiTaskEnv(task_names, freq_weighted)
 
     return _make
 
